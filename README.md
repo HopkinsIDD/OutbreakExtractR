@@ -1,0 +1,116 @@
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+# OutbreakExtractR
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+The goal of OutbreakExtractR is to extract cholera outbreaks from
+cholera surveillance data based on an operational outbreak definition.
+The cholera surveillance data comes from the [Global Cholera Taxonomy
+Database](https://cholera-taxonomy.middle-distance.com/) This package
+includes functions to process the cholera surveillance data into time
+series and identify cholera outbreaks from the processed time series. In
+addition to the cholera surveillance data, shapefiles from the [Global
+Cholera Taxonomy
+Database](https://cholera-taxonomy.middle-distance.com/) and population
+data from [WorldPop](https://www.worldpop.org/) via the
+[wpgpDownloadR](https://github.com/wpgp/wpgpDownloadR) package are also
+included in the outbreak extraction process.
+
+## Installation
+
+You can install the development version of OutbreakExtractR from
+[GitHub](https://github.com/HopkinsIDD/OutbreakExtractR) with:
+
+``` r
+# install.packages("devtools")
+# devtools::install_github("HopkinsIDD/OutbreakExtractR")
+devtools::document()
+install.packages('.',repo=NULL,type="source")
+```
+
+## Example
+
+``` r
+library(OutbreakExtractR)
+
+# Pull cholera surveillance data from global cholera taxonomy database ----
+## Log into cholera taxonomy PostgreSQL database with: ----
+## psql -h db.cholera-taxonomy.middle-distance.com -U  <USERNAME>  CholeraTaxonomy_production
+
+##Pull data from PostgreSQL database ----
+## After logging into the PostgreSQL database, to extract observations for outbreak extraction, select data from observations and locations table.
+## Here's an example: all observations from African region (including those countries under EMR WHO region) between 2010-01-01 and 2023-12-31
+## \copy (select observation_collection_id, observations.time_left as "TL", observations.time_right as "TR", observations.suspected_cases as "sCh", observations.confirmed_cases as "cCh", observations.deaths, observations.location_period_id, observations.primary, observations.phantom, observations.location_id, locations.qualified_name as "location" from observations left join locations on observations.location_id = locations.id where time_left >= to_date('2011-01-01', 'yyyy-mm-dd') AND time_right <= to_date('2013-12-31', 'yyyy-mm-dd') AND (qualified_name like '%AFR::%' OR qualified_name like '%EMR::SOM%' OR qualified_name like '%EMR::DJI%' OR qualified_name like '%EMR::SDN%')) to '~/observations_2011_2023.csv' csv header;
+
+# Load pulled cholera surveillance data ----
+raw_data <- read.csv("data/raw_data.csv")
+
+# Clean the the pulled data ----
+## a. Standardize descriptive columns;  
+## b. Clean location names;
+## c. Average duplicate observations;
+## d. Identify spatial and temporal resolutions.
+clean_raw_data <- OutbreakExtractR::clean_psql_data(raw_data)
+
+# Select relevant observations based on: ----
+## a. Study time period
+## b. Study location
+## c. Whether to remove observations without suspected or confirmed cholera cases
+## d. Whether to remove observations without shapefiles
+## e. Minimum number of reported daily cases
+filtered_data <- clean_raw_data %>% 
+  OutbreakExtractR::observation_filter(
+    time_lower_bound_filter = lubridate::ymd("2010-01-01"),
+    time_upper_bound_filter = lubridate::ymd("2023-12-31"),
+    temporal_scale_filter = c("daily","weekly"),
+    who_regions = c("AFR", "EMR"),
+    remove_na_sCh = TRUE,
+    remove_na_cCh = FALSE,
+    minimum_daily_cases = 0
+  ) 
+# If there is daily data, aggregate them into weekly intervals ---
+filtered_daily_data <- filtered_data %>% 
+  dplyr::filter(temporal_scale == "daily") %>% 
+  OutbreakExtractR::observation_aggregator() 
+
+filtered_weekly_data <- filtered_data %>% 
+  dplyr::filter(temporal_scale == "weekly") 
+
+# Combine the newly aggregated weekly data with the original weekly data and process the weekly time series ----
+## a. Averages observations with the same location-epiweek;
+## b. Standardizes TL and TR to start on same weekday for all obs (only 1 per location-epiweek);
+## c. Fill 0s for weeks with missing reports as well as for 8-weeks of padding around each location-specific time series and adds phantom column.
+## d. Fill missing location periods (lps) based on other lp-linked locations in the time series
+ct_clean_export <- dplyr::bind_rows(filtered_daily_data, filtered_weekly_data) %>%
+  ungroup() %>% 
+  OutbreakExtractR::average_duplicate_observations() %>% 
+  OutbreakExtractR::set_uniform_wday_start() %>%
+  OutbreakExtractR::fill_phantom_zeroes() %>%
+  OutbreakExtractR::fill_missing_lps() 
+
+
+# Estimate population data ----
+## a. For each country and year, calculate the adjustment factor by comparing the population in the time series to the corresponding population estimate from the UN for that year. The formula would be: Population Adjust Factor=UN Population Estimate/worldpop Estimate;
+## b. Use the most recent population adjustment factor for post-2020 observations.
+
+## TBD 
+
+# Identify outbreaks ----
+## a. Calculate the outbreak threshold for all observations;
+## b. Identify outbreak start;
+## c. Identify outbreak tail;
+## d. Extract outbreaks;
+
+outbreak_list <- OutbreakExtractR::identify_outbreaks(
+  threshold_type = "mean weekly incidence rate",
+  original_data = ct_clean_export,
+  zero_case_assumption = T,
+  customized_TL = NULL,
+  customized_TR = NULL
+)
+```
+
+<img src="man/figures/README-Epidemic curve-1.png" width="100%" />
