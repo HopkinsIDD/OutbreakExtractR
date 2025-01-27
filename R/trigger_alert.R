@@ -30,7 +30,7 @@ trigger_alert <- function(original_data){
                   alert2 = dplyr::if_else(alert1 & alert1cum_4wk >= 2, TRUE, FALSE),
                   alert3 = dplyr::if_else(alert1 & alert1cum_4wk >= 3, TRUE, FALSE)) 
     
-    ## CA Jan 21 2025 to ensure alerts 1-3 appear on the week after they would be identified - To be tested
+    ## CA Jan 21 2025 to ensure alerts 1-3 appear on the week after they would be identified - tested
     a3 <- dplyr::mutate(a3,
                         alert1 = dplyr::lag(alert1, n = 1, default = FALSE),
                         alert2 = dplyr::lag(alert2, n = 1, default = FALSE),
