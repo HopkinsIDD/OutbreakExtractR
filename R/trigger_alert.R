@@ -53,12 +53,6 @@ trigger_alert <- function(original_data){
     sum2weeks <- zoo::rollapply(cases_seq, width = 2, FUN = sum, align = "left", fill = NA)
     sum3weeks <- zoo::rollapply(cases_seq, width = 3, FUN = sum, align = "left", fill = NA)
     
-    ## alert0: At least one sCh in 1 week – expansive alert that captures all reported suspected cholera activity 
-    
-    alert0_exists <- ifelse(sum1weeks >= 1, TRUE, FALSE)
-    alert0 <- rep(FALSE, length(alert0_exists))
-    ## set alert to the week after pattern occurs
-    alert0[which(alert0_exists)+1] <- TRUE
     
     ## alert4: 3 consecutive weeks with at least 2 sCh each
 
@@ -164,7 +158,6 @@ trigger_alert <- function(original_data){
     #### end cumulative case alerts ####
     
     rc <- dplyr::mutate(a_caseratio, 
-                        alert0 = alert0, 
                         alert4 = alert4, alert5 = alert5, alert6 = alert6, alert7 = alert7, alert8 = alert8, alert9 = alert9, alert10 = alert10,
                         alert11 = alert11, alert12 = alert12, alert13 = alert13, alert14 = alert14, alert15 = alert15, alert16 = alert16, alert17) 
     
