@@ -14,6 +14,12 @@ create_alert_groups2 <- function(alerts, nweeks){
     dplyr::group_by(location, alert_number) %>% 
     dplyr::mutate(group = cumsum(postprocessed))
   
+  ## count the number of alerts in each group
+  alert_groups <- alert_groups %>% 
+    dplyr::group_by(location, alert_number, group) %>% 
+    dplyr::mutate(alert_count = n()) %>% 
+    dplyr::ungroup()
+  
   ## find the last non-postprocessed date in each group
   alert_groups <- alert_groups %>% 
     dplyr::group_by(location, alert_number, group) %>% 
@@ -29,7 +35,7 @@ create_alert_groups2 <- function(alerts, nweeks){
     ## keep only rows with postprocessed alerts - each row represents a unique alert group
     dplyr::filter(postprocessed) %>%  
     dplyr::rename(TL_first_alert = TL, TL_last_alert = reference_date) %>%
-    dplyr::select(alert_id, location, TL_first_alert, TL_last_alert, alert_number, alert_type)
+    dplyr::select(alert_id, location, TL_first_alert, TL_last_alert, alert_number, alert_type, alert_count)
   
   return(alert_groups)
 }
