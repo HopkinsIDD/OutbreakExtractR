@@ -1,9 +1,13 @@
 #' Title create_alert_groups2
 #' @name create_alert_groups2
-#' @param alerts_postprocessed a df with alerts, icluding a column indicating whether each alert is postprocessed
+#' @param alerts a df with formatted alerts
+#' @param nweeks the number of weeks where an alert of a specific number has not been triggered so that this alert is considered postprocessed (starts a new alert group)
 #' @return the alert group df, each row is a unique alert group. Includes the alert_id of the first alert in the group, the TL of the first and last alert in the group, the alert number and alert type
 #' @export
-create_alert_groups2 <- function(alerts_postprocessed){
+create_alert_groups2 <- function(alerts, nweeks){
+  
+  ## call define_postprocessed_alerts with nweeks argument
+  alerts_postprocessed <- OutbreakExtractR::define_postprocessed_alerts(alerts, nweeks)
   
   ## identify groups of consecutive non-postprocessed alerts
   alert_groups <- alerts_postprocessed %>% 
