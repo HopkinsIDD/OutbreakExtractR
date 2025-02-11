@@ -10,5 +10,5 @@ add_unique_alert_ids(dat)
 \item{dat}{dataframe}
 }
 \description{
-add unique IDs for each alert -- assuming alerts 0-17 based on trigger_alert function
+add unique IDs for each alert -- assuming alerts 1-17 based on trigger_alert function
 }
