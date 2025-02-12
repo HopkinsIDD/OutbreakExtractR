@@ -14,7 +14,7 @@ calculate_cases <- function(alert_group_df, preoutbreak_ts, delay_period, evalua
     dplyr::rowwise() %>%
     dplyr::mutate(
       evaluation_start_date = TL_first_alert + lubridate::weeks(delay_period), ## the date of the first alert in the alert group plus delay period
-      evaluation_end_date = evaluation_start_date + lubridate::weeks(evaluation_period) 
+      evaluation_end_date = evaluation_start_date + lubridate::weeks(evaluation_duration) 
     ) %>%
     dplyr::group_by(alert_id, location, evaluation_start_date, evaluation_end_date) %>%
     dplyr::summarise(
