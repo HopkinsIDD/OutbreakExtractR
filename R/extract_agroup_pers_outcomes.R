@@ -87,9 +87,19 @@ extract_agroup_pers_outcomes <- function(dat, alert_col, alert_group_col, delay_
     dplyr::ungroup()
   
   ## consolidate outcomes by alert group id
+  ## CA Jan 28: Modification to keep track of first alert_id that has a TRUE outcome in the alert group
   group_summary <- summary_dat %>%
     dplyr::group_by(alert_group_id, out_col) %>%
-    dplyr::summarise(group_outcome = any(outcome == TRUE), .groups = 'drop')
+    dplyr::summarise(
+      group_outcome = any(outcome == TRUE),
+      earliest_true_alert_id = if (any(outcome == TRUE)) {
+        alert_id[outcome == TRUE][1]
+      } else {
+        NA ## if the group outcome is FALSE
+      },
+      .groups = 'drop'
+    )
+  ## end modification
   
   final_summary <-
     dplyr::left_join(summary_dat, group_summary, by = c("alert_group_id", "out_col"))
