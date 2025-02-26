@@ -25,6 +25,9 @@ identify_outbreaks(
 
 \item{customized_TR:}{customize the upper bound of time for outbreak estimation}
 }
+\value{
+list
+}
 \description{
 identify_outbreaks
 }

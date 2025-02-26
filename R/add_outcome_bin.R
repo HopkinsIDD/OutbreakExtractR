@@ -3,7 +3,7 @@
 #' @description bin case outcomes
 #' @param basedf 
 #' @param bins 
-#' @return
+#' @return dataframe
 #' @export
 add_outcome_bin <- function(basedf, bins){
   
