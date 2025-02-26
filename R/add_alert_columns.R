@@ -3,7 +3,7 @@
 #' @description Attach alert unique identifier columns from the alert dataset matched by alert_id
 #' @param basedf 
 #' @param alertdf 
-#' @return
+#' @return dataframe
 #' @export
 add_alert_columns <- function(basedf, alertdf){
   

@@ -9,7 +9,7 @@
 #' @param customized_TL: customize the lower bound of time for outbreak estimation
 #' @param customized_TR: customize the upper bound of time for outbreak estimation
 #' @export
-#' @return
+#' @return list
 
 identify_outbreaks <- function(
     threshold_type,

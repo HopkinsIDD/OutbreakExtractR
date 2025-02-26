@@ -16,9 +16,9 @@ calculate_cases(
 
 \item{preoutbreak_ts}{preoutbreak time series}
 
-\item{evaluation_duration}{the duration of the evaluation period}
+\item{evaluation_duration}{the duration (weeks) of the evaluation period}
 
-\item{delay}{the delay after the start of the alert group that will begin the evaluation period}
+\item{delay}{the delay (weeks) after the start of the alert group that will begin the evaluation period}
 }
 \value{
 the alert group df with the alert_id, location, evaluation period start, evaluation period end, and total number of suspected cases during the evaluation period
