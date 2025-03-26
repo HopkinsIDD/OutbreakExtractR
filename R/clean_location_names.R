@@ -5,6 +5,9 @@
 clean_location_names <- function(
     original_data
 ){
+  # Rename original location name column ----
+  original_data$original_location_name = original_data$location
+  
   original_data$location=dplyr::case_when(
     #Kenya
     original_data$location=='AFR::KEN::KE-600::Bondo'~'AFR::KEN::Nyanza::Bondo',
@@ -48,6 +51,7 @@ clean_location_names <- function(
     original_data$location=='AFR::BDI::BI-KY::Gahombo|Gatara|Muhanga'~'AFR::BDI::Kayanza::Gahombo|Gatara|Muhanga',
     original_data$location=='AFR::BDI::BI-MU::Kiganda|Mbuye|Rutegama'~'AFR::BDI::Muramvya::Kiganda|Mbuye|Rutegama',
     original_data$location=='AFR::BDI::BI-MU::Bukeye|Muramvya'~'AFR::BDI::Muramvya::Bukeye|Muramvya',
+    original_data$location=='AFR::BDI::BI-BM|BI-CI'~'AFR::BDI::Bujumbura Mairie|Cibitoke',
     #CIV
     original_data$location=='AFR::CIV::CI-CM::Aboisso'~'AFR::CIV::Comoe::Sud-Comoe::Aboisso',
     original_data$location=='AFR::CIV::CI-CM::Adiake'~'AFR::CIV::Comoe::Sud-Comoe::Adiake',
@@ -92,6 +96,22 @@ clean_location_names <- function(
     original_data$location=='AFR::MWI::MW-BL::Limbe'~'AFR::MWI::Southern::Blantyre::Limbe',
     original_data$location=='AFR::MWI::MW-BL::Ndirande'~'AFR::MWI::Southern::Blantyre::Ndirande',
     original_data$location=='AFR::MWI::MW-BL::SocheMaternity'~'AFR::MWI::Southern::Blantyre::SocheMaternity',
+    
+    #Locations with changing parents and temporally overlapping observations
+    original_data$location=='AFR::SSD::Western Nile::Fashoda'~'AFR::SSD::Fashoda::Fashoda County',
+    original_data$location=='AFR::SSD::Eastern Bieh::Nyirol'~'AFR::SSD::Bieh::Nyirol',
+    original_data$location=='AFR::SSD::Eastern Nile::Malakal'~'AFR::SSD::Central Upper Nile::Malakal',
+    original_data$location=='AFR::SSD::Namorunyang::Kapoeta South'~'AFR::SSD::Kapoeta::Kapoeta South',
+    original_data$location=='AFR::SSD::Yei River::Kajo-keji'~'AFR::SSD::SS-EC::Kajo-keji',
+    original_data$location=='AFR::SSD::Namorunyang::Budi'~'AFR::SSD::Kapoeta::Budi',
+    original_data$location=='AFR::SSD::Namorunyang::Kapoeta East'~'AFR::SSD::Kapoeta::Kapoeta East',
+    original_data$location=='AFR::COD::Katanga::Kampemba Health District' ~ 'AFR::COD::Katanga::Kapemba Health District',
+    original_data$location=='AFR::COD::Orientale::Nia Nia Health District' ~ 'AFR::COD::Orientale::Niania Health District',
+    original_data$location=='AFR::COD::Equateur::Bolonge Health District' ~ 'AFR::COD::Equateur::Bolenge Health District',
+    original_data$location=='AFR::COD::Equateur::Mankanza Health District' ~ 'AFR::COD::Equateur::Makanza Health District',
+    
+    
+    
     TRUE ~ as.character(original_data$location)
   )
 
@@ -112,8 +132,8 @@ clean_location_names <- function(
   original_data$admin1=dplyr::case_when(
     #Angola
     original_data$admin1=='AO-CNN'~'Cunene',
-    original_data$admin1=='AO-HUI'~'Hu?la',
-    original_data$admin1=='AO-UIG'~'U?ge',
+    original_data$admin1=='AO-HUI'~'Huila',
+    original_data$admin1=='AO-UIG'~'Uige',
     original_data$admin1=='AO-BGU'~'Benguela',
     original_data$admin1=='AO-CNO'~'Cuanza Norte',
     original_data$admin1=='AO-CUS'~'Cuanza Sul',
@@ -123,11 +143,21 @@ clean_location_names <- function(
     original_data$admin1=='AO-NAM'~'Namibe',
     original_data$admin1=='AO-ZAI'~'Zaire',
     original_data$admin1=='AO-BGO'~'Bengo',
-    original_data$admin1=='AO-BIE'~'Bi?',
+    original_data$admin1=='AO-BIE'~'Bie',
     original_data$admin1=='AO-CAB'~'Cabinda',
     original_data$admin1=='AO-CCU'~'Kuando Kubango',
     original_data$admin1=='AO-HUA'~'Huambo',
     original_data$admin1=='AO-LSU'~'Lunda Sul',
+    
+    #BDI
+    original_data$admin1=='BI-CA'~'Cankuzo',
+    original_data$admin1=='BI-GI'~'Gitega',
+    original_data$admin1=='BI-KI'~'Kirundo',
+    original_data$admin1=='BI-KR'~'Karuzi',
+    original_data$admin1=='BI-KI'~'Kirundo',
+    original_data$admin1=='BI-KY'~'Kayanza',
+    original_data$admin1=='BI-MU'~'Muramvya',
+    
     #BEN
     original_data$admin1=='BJ-AK'~'Atacora',
     original_data$admin1=='BJ-AL'~'Alibori',
@@ -142,6 +172,9 @@ clean_location_names <- function(
     original_data$admin1=='BJ-OU'~'Oueme',
     original_data$admin1=='BJ-PL'~'Plateau',
     original_data$admin1=='BJ-ZO'~'Zou',
+    original_data$admin1=='Atakora'~'Atacora',
+    original_data$admin1=='Ouémé'~'Oueme',
+    
     #BFA
     original_data$admin1=='BF-01'~'Boucle du Mouhoun',
     original_data$admin1=='BF-02'~'Cascades',
@@ -205,10 +238,14 @@ clean_location_names <- function(
     original_data$admin1=='GN-L'~'Labe',
     original_data$admin1=='GN-M'~'Mamou',
     original_data$admin1=='GN-N'~'Nzerekore',
+    original_data$admin1=="N'Zerekore"~'Nzerekore',
+    
     #Guinea Bissau
     original_data$admin1=='GW-BM'~'Biombo',
     original_data$admin1=='GW-CA'~'Cacheu',
     original_data$admin1=='GW-OI'~'Oio',
+    original_data$admin1=='GW-BS'~'Bissau',
+    
     #MDG
     original_data$admin1=='MG-A'~'Toamasina',
     original_data$admin1=='MG-D'~'Antsiranana',
@@ -238,14 +275,16 @@ clean_location_names <- function(
     original_data$admin1=='MW-CK'~'Southern::Chikwawa',
     original_data$admin1=='MW-NS'~'Southern::Nsanje',
     original_data$admin1=='MW-PH'~'Southern::Phalombe',
+    original_data$admin1=='MW-MH'~'Southern::Machinga',
+    original_data$admin1=='MW-MU'~'Southern::Mulanje',
     #Niger
-    original_data$admin1=='NE-6'~'Tillab?ri',
+    original_data$admin1=='NE-6'~'Tillaberi',
     original_data$admin1=='NE-4'~'Maradi',
     original_data$admin1=='NE-2|NE-4|NE-5|NE-7'~'Diffa|Maradi|Tahoua|Zinder',
-    original_data$admin1=='NE-2|NE-4|NE-6|NE-7'~'Diffa|Maradi|Tillab?ri|Zinder',
+    original_data$admin1=='NE-2|NE-4|NE-6|NE-7'~'Diffa|Maradi|Tillaberi|Zinder',
     original_data$admin1=='NE-3|NE-4|NE-8'~'Dosso|Maradi|Niamey',
     original_data$admin1=='NE-3|NE-4|NE-5|NE-7'~'Dosso|Maradi|Tahoua|Zinder',
-    original_data$admin1=='NE-5|NE-6'~'Tahoua|Tillab?ri',
+    original_data$admin1=='NE-5|NE-6'~'Tahoua|Tillaberi',
     #SLE
     original_data$admin1=='SL-E'~'Eastern',
     original_data$admin1=='SL-N'~'Northern',
@@ -279,6 +318,8 @@ clean_location_names <- function(
     original_data$admin1=='SO-GA'~'Galguduud',
     original_data$admin1=='SO-BN|SO-GA|SO-HI|SO-SD'~'Banaadir|Galguduud|Hiiraan|Shabeellaha Dhexe',
     original_data$admin1=='SO-BN|SO-HI|SO-JH|SO-SH'~'Banaadir|Hiiraan|Lower Juba|Lower Shabelle',
+    original_data$admin1=='SO-GE'~'Gedo',
+    original_data$admin1=='SO-JD'~'Jubbada Dhexe',
     #South Sudan
     original_data$admin1=='SS-BW'~'Western Bahr el Ghazal',
     original_data$admin1=='SS-EC'~'Central Equatoria',
@@ -317,6 +358,10 @@ clean_location_names <- function(
     original_data$admin1=='TZ-28'~'Mainland::Katavi',
     original_data$admin1=='TZ-29'~'Mainland::Njombe',
     original_data$admin1=='TZ-31'~'Mainland::Songwe',
+    
+    #Togo
+    original_data$admin1=='TG-M'~'Maritime',
+    
     #Uganda
     original_data$admin1=='UG-101'~'Kalangala',
     original_data$admin1=='UG-102'~'Kampala',
@@ -484,8 +529,28 @@ clean_location_names <- function(
     original_data$admin2=='BF-ZIR'~'Ziro',
     original_data$admin2=='BF-ZON'~'Zondoma',
     original_data$admin2=='BF-ZOU'~'Zoundweogo',
+    
+    #Somalia
+    original_data$admin2=='Badhaadhe'~'Badhaadhe',
+    
+    #GIN
+    original_data$admin2=="GN-FR"~'Fria',
+    original_data$admin2=="GN-KE"~'Kerouane',
+    original_data$admin2=="GN-BF"~'Boffa',
+    original_data$admin2=="GN-FO"~'Forecariah',
+    original_data$admin2=="GN-FA"~'Faranah',
+    original_data$admin2=="GN-MM"~'Mamou',
+    original_data$admin2=="GN-KD"~'Kindia',
+    original_data$admin2=="GN-BK"~'Boke',
+    original_data$admin2=="GN-KA"~'Kankan',
+    
     TRUE ~ as.character(original_data$admin2)
   )
 
+  # merge updated admX columns into a new location name column
+  original_data <- original_data %>%
+    dplyr::ungroup() %>%
+    tidyr::unite("location", who_region:admin6, sep = "::", na.rm = TRUE, remove = FALSE)
+  
   return(original_data)
 }
