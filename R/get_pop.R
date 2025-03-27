@@ -118,6 +118,11 @@ get_pop <- function(
     
     pop_country_2020 <- WPP2022[WPP2022$ISO3_code == country & WPP2022$Time == 2020,]$PopTotal  * 1e3
     pop_country_after_2020 <- WPP2022[WPP2022$ISO3_code == country & WPP2022$Time == year,]$PopTotal * 1e3
+    
+    if(length(pop_country_after_2020)>1){ # for years after 2022, there are multiple UN pop estimates and the average of them is used.
+      pop_country_after_2020 = mean(pop_country_after_2020,na.rm=T)
+    }
+    
     pop_export <- pop_2020/pop_country_2020*pop_country_after_2020
     
   }else{
