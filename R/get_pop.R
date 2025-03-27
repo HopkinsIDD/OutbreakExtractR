@@ -140,7 +140,7 @@ get_pop <- function(
 }
   
   # Check if pop is 0, if so, replace the pop with GHS population 
-  if(pop ==0 ){
+  if(pop_export ==0 ){
     cat("The population estimated based on worldpop is 0. Replace it with the GHS population")
     
     if(is.null(raster_dir) == T) {
