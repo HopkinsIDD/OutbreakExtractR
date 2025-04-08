@@ -5,7 +5,7 @@
 #' @return a 'long' version of the alerts dataframe with columns for the alert_id, location, TL, spatial scale, country, alert number (numeric), and alert type
 #' @export
 format_alerts <- function(alerts_df){
-  alert_id_columns <- paste0("alert", 1:17, "_id")
+  alert_id_columns <- paste0("alert", 1:18, "_id")
   alerts_df <- tidyr::pivot_longer(alerts_df, cols = alert_id_columns,
                                    names_to = "alert_column",
                                    values_to = "alert_id") %>%
@@ -14,7 +14,8 @@ format_alerts <- function(alerts_df){
     dplyr::select(alert_id, location, TL, spatial_scale, country, alert_number) %>%
     dplyr::mutate(alert_type = dplyr::case_when(alert_number %in% c(1:3) ~ "trend",
                                                 alert_number %in% c(4:10) ~ "case",
-                                                alert_number %in% c(11:17) ~ "cumsum"))
+                                                alert_number %in% c(11:17) ~ "cumsum",
+                                                alert_number %in% c(18) ~ "incid"))
   
   return(alerts_df)
 }

@@ -11,6 +11,13 @@ trigger_alert <- function(original_data){
     df_tmp <- dplyr::filter(df_original, location == loc)
     cases_seq <- df_tmp$sCh
     
+    ## weekly incidence per 1000 people
+    df_tmp <- dplyr::mutate(df_tmp,
+                            weekly_incidence = ifelse(pop > 0,
+                                                      (sCh / pop) * 1000,
+                                                      NA_real_))
+    incidence_seq <- df_tmp$weekly_incidence  ## used for incidence rate-based alert18
+    
     #### Upward trend-based alerts ####
 
     ## pad NAs at the end to keep the same length as cases_seq
@@ -157,9 +164,20 @@ trigger_alert <- function(original_data){
 
     #### end cumulative case alerts ####
     
+    #### incidence rate alerts ####
+    
+    ## alert 18: weekly incidence rate exceeds mean weekly incidence rate of the last 3 weeks
+    
+    mean3weeks_inc_tmp <- zoo::rollapply(incidence_seq, width = 3, FUN = mean, align = "right", fill = NA)
+    mean3weeks_inc <- c(NA, mean3weeks_inc_tmp[1:length(mean3weeks_inc_tmp)-1]) 
+    alert18_raw <- ifelse(incidence_seq > mean3weeks_inc, TRUE, FALSE)
+    alert18 <- dplyr::lag(alert18_raw, n = 1, default = FALSE)
+    
+    #### end incidence rate alerts ####
+    
     rc <- dplyr::mutate(a_caseratio, 
                         alert4 = alert4, alert5 = alert5, alert6 = alert6, alert7 = alert7, alert8 = alert8, alert9 = alert9, alert10 = alert10,
-                        alert11 = alert11, alert12 = alert12, alert13 = alert13, alert14 = alert14, alert15 = alert15, alert16 = alert16, alert17) 
+                        alert11 = alert11, alert12 = alert12, alert13 = alert13, alert14 = alert14, alert15 = alert15, alert16 = alert16, alert17, alert18 = alert18) 
     
     return(rc)
 
