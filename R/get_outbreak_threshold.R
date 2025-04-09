@@ -9,7 +9,7 @@
 #' @param customized_TL: customize the lower bound of time for outbreak estimation
 #' @param customized_TR: customize the upper bound of time for outbreak estimation
 #'
-#' @return 
+#' @return dataframe
 #' 
 get_outbreak_threshold <- function (
     threshold_type = c("fixed threshold","mean weekly incidence rate","outbreak_dependent threshold","time_restricted threshold"),

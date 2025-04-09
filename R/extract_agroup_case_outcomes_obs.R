@@ -86,9 +86,19 @@ extract_agroup_case_outcomes <- function(dat, alert_col, alert_group_col, delay_
       outcome_type = out_col,
       outcome = dplyr::if_else(sCh >= intervene_thresh, TRUE, FALSE))
   
+  ## CA Jan 28: Modification to keep track of first alert_id that has a TRUE outcome in the alert group
   group_summary <- summary_dat %>%
     dplyr::group_by(alert_group_id) %>%
-    dplyr::summarise(group_outcome = any(outcome == TRUE), .groups = 'drop')
+    dplyr::summarise(
+      group_outcome = any(outcome == TRUE),
+      earliest_true_alert_id = if (any(outcome == TRUE)) {
+        alert_id[outcome == TRUE][1]
+      } else {
+        NA ## if the group outcome is FALSE
+      },
+      .groups = 'drop'
+    )
+  ## end modification
   
   final_summary <- summary_dat %>%
     dplyr::left_join(group_summary, by = "alert_group_id")
