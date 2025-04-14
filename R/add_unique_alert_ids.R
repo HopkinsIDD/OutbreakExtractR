@@ -1,7 +1,7 @@
 #' @export
 #' @title add_unique_alert_ids
 #' @name add_unique_alert_ids
-#' @description add unique IDs for each alert -- assuming alerts 1-18 based on trigger_alert function
+#' @description add unique IDs for each alert -- assuming alerts 1-24 based on trigger_alert function
 #' @param dat dataframe
 add_unique_alert_ids <- function(dat){
 
@@ -43,7 +43,19 @@ add_unique_alert_ids <- function(dat){
                   alert17_id = dplyr::case_when(alert17 ~ paste("a17", location, TL, sep = "_"),
                                                !alert17 ~ NA),
                   alert18_id = dplyr::case_when(alert18 ~ paste("a18", location, TL, sep = "_"),
-                                                !alert18 ~ NA))
+                                                !alert18 ~ NA),
+                  alert19_id = dplyr::case_when(alert19 ~ paste("a19", location, TL, sep = "_"),
+                                                !alert19 ~ NA),
+                  alert20_id = dplyr::case_when(alert20 ~ paste("a20", location, TL, sep = "_"),
+                                                !alert20 ~ NA),
+                  alert21_id = dplyr::case_when(alert21 ~ paste("a21", location, TL, sep = "_"),
+                                                !alert21 ~ NA),
+                  alert22_id = dplyr::case_when(alert22 ~ paste("a22", location, TL, sep = "_"),
+                                                !alert22 ~ NA),
+                  alert23_id = dplyr::case_when(alert23 ~ paste("a23", location, TL, sep = "_"),
+                                                !alert23 ~ NA),
+                  alert24_id = dplyr::case_when(alert24 ~ paste("a24", location, TL, sep = "_"),
+                                                !alert24 ~ NA))
   
   
 }

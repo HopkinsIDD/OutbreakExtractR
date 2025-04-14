@@ -11,12 +11,12 @@ trigger_alert <- function(original_data){
     df_tmp <- dplyr::filter(df_original, location == loc)
     cases_seq <- df_tmp$sCh
     
-    ## weekly incidence per 1000 people
+    ## weekly incidence per 10000 people
     df_tmp <- dplyr::mutate(df_tmp,
                             weekly_incidence = ifelse(pop > 0,
-                                                      (sCh / pop) * 1000,
+                                                      (sCh / pop) * 10000,
                                                       NA_real_))
-    incidence_seq <- df_tmp$weekly_incidence  ## used for incidence rate-based alert18
+    incidence_seq <- df_tmp$weekly_incidence  ## used for rate-based alerts
     
     #### Upward trend-based alerts ####
 
@@ -164,20 +164,63 @@ trigger_alert <- function(original_data){
 
     #### end cumulative case alerts ####
     
-    #### incidence rate alerts ####
+    #### rate alerts ####
     
-    ## alert 18: weekly incidence rate exceeds mean weekly incidence rate of the last 3 weeks
+    ## rolling incidence over 1, 2, and 3 weeks
+    sumincid1weeks <- zoo::rollapply(incidence_seq, width = 1, FUN = sum, align = "left", fill = NA)
+    sumincid2weeks <- zoo::rollapply(incidence_seq, width = 2, FUN = sum, align = "left", fill = NA)
+    sumincid3weeks <- zoo::rollapply(incidence_seq, width = 3, FUN = sum, align = "left", fill = NA)
     
-    mean3weeks_inc_tmp <- zoo::rollapply(incidence_seq, width = 3, FUN = mean, align = "right", fill = NA)
-    mean3weeks_inc <- c(NA, mean3weeks_inc_tmp[1:length(mean3weeks_inc_tmp)-1]) 
-    alert18_raw <- ifelse(incidence_seq > mean3weeks_inc, TRUE, FALSE)
-    alert18 <- dplyr::lag(alert18_raw, n = 1, default = FALSE)
+    ## alert 18: at least 0.25 per 10,000 population in 3 consecutive weeks
+    alert18_exists <- ifelse(sumincid1weeks >= 0.25 & sumincid2weeks >= 0.25 * 2 & sumincid3weeks >= 0.25 * 3,TRUE, FALSE)
+    alert18 <- rep(FALSE, length(alert18_exists))
+    ## set alert to the week after pattern occurs
+    alert18[which(alert18_exists) + 3] <- TRUE
     
-    #### end incidence rate alerts ####
+    ## alert 19: at least 0.5 per 10,000 population in 3 consecutive weeks
+    alert19_exists <- ifelse(sumincid1weeks >= 0.5 & sumincid2weeks >= 0.5 * 2 & sumincid3weeks >= 0.5 * 3,TRUE, FALSE)
+    alert19 <- rep(FALSE, length(alert19_exists))
+    ## set alert to the week after pattern occurs
+    alert19[which(alert19_exists) + 3] <- TRUE
+    
+    ## alert 20: at least 1 per 10,000 population in 3 consecutive weeks
+    alert20_exists <- ifelse(sumincid1weeks >= 1 & sumincid2weeks >= 1 * 2 & sumincid3weeks >= 1 * 3,TRUE, FALSE)
+    alert20 <- rep(FALSE, length(alert20_exists))
+    ## set alert to the week after pattern occurs
+    alert20[which(alert20_exists) + 3] <- TRUE
+    
+    ## alert 21: at least 1.5 per 10,000 population in 3 consecutive weeks
+    alert21_exists <- ifelse(sumincid1weeks >= 1.5 & sumincid2weeks >= 1.5 * 2 & sumincid3weeks >= 1.5 * 3,TRUE, FALSE)
+    alert21 <- rep(FALSE, length(alert21_exists))
+    ## set alert to the week after pattern occurs
+    alert21[which(alert21_exists) + 3] <- TRUE
+    
+    ## alert 22: at least 2.5 per 10,000 population in 3 consecutive weeks
+    alert22_exists <- ifelse(sumincid1weeks >= 2.5 & sumincid2weeks >= 2.5 * 2 & sumincid3weeks >= 2.5 * 3,TRUE, FALSE)
+    alert22 <- rep(FALSE, length(alert22_exists))
+    ## set alert to the week after pattern occurs
+    alert22[which(alert22_exists) + 3] <- TRUE
+    
+    ## alert 23: at least 5 per 10,000 population in 3 consecutive weeks
+    alert23_exists <- ifelse(sumincid1weeks >= 5 & sumincid2weeks >= 5 * 2 & sumincid3weeks >= 5 * 3,TRUE, FALSE)
+    alert23 <- rep(FALSE, length(alert23_exists))
+    ## set alert to the week after pattern occurs
+    alert23[which(alert23_exists) + 3] <- TRUE
+    
+    ## alert 24: at least 7.5 per 10,000 population in 3 consecutive weeks
+    alert24_exists <- ifelse(sumincid1weeks >= 7.5 & sumincid2weeks >= 7.5 * 2 & sumincid3weeks >= 7.5 * 3,TRUE, FALSE)
+    alert24 <- rep(FALSE, length(alert24_exists))
+    ## set alert to the week after pattern occurs
+    alert24[which(alert24_exists) + 3] <- TRUE
+    
+    #### end rate alerts ####
     
     rc <- dplyr::mutate(a_caseratio, 
                         alert4 = alert4, alert5 = alert5, alert6 = alert6, alert7 = alert7, alert8 = alert8, alert9 = alert9, alert10 = alert10,
-                        alert11 = alert11, alert12 = alert12, alert13 = alert13, alert14 = alert14, alert15 = alert15, alert16 = alert16, alert17, alert18 = alert18) 
+                        alert11 = alert11, alert12 = alert12, alert13 = alert13, alert14 = alert14, alert15 = alert15, alert16 = alert16, alert17,
+                        alert18 = alert18, alert19 = alert19, alert20 = alert20, alert21 = alert21, alert22 = alert22, alert23 = alert23, alert24 = alert24) 
+    
+    
     
     return(rc)
 
