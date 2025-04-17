@@ -47,7 +47,7 @@ clean_psql_data <- function(
       epiweek = OutbreakExtractR::get_epiweek(TL),
       composite_loc = dplyr::if_else(stringr::str_detect(location, "\\|"), TRUE, FALSE)
     ) %>%
-    dplyr::select(location, TL, TR, sCh, cCh, deaths, spatial_scale, composite_loc, date_range, temporal_scale, start_weekday, epiweek, who_region, country, admin1, admin2, admin3, admin4, admin5, admin6, location_period_id)
+    dplyr::select(location, TL, TR, sCh, cCh, deaths, spatial_scale, composite_loc, date_range, temporal_scale, start_weekday, epiweek, who_region, country, admin1, admin2, admin3, admin4, admin5, admin6, location_period_id,observation_collection_id,original_location_name)
 
   return(outbreak_data)
 }

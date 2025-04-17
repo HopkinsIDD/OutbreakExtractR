@@ -9,6 +9,10 @@ average_duplicate_observations <- function(
     sorted <- original_data %>% 
         dplyr::arrange(location, TL, epiweek) %>%
         dplyr::group_by(location, epiweek) %>%
+        dplyr::mutate(
+          original_location_name = custom_paste(original_location_name),
+          observation_collection_id = custom_paste(observation_collection_id)
+        ) %>% 
         dplyr::add_count() %>%
         dplyr::ungroup()
     
@@ -16,10 +20,12 @@ average_duplicate_observations <- function(
     dups <- sorted %>%
         dplyr::filter(n>1) %>%
         dplyr::group_by(location, epiweek) %>%
-        dplyr::mutate(dplyr::across(c(sCh, cCh, deaths), ~ mean(.x, na.rm = TRUE))) %>% ## average duplicate values
+        dplyr::mutate(dplyr::across(c(sCh, cCh, deaths), ~ mean(.x, na.rm = TRUE)),
+                      original_location_name = custom_paste(original_location_name),
+                      observation_collection_id = custom_paste(observation_collection_id)) %>%
         dplyr::ungroup() %>% 
         dplyr::mutate(dplyr::across(c(sCh, cCh, deaths), ~ ifelse(is.nan(.x), NA, .x))) %>% ## rm NaNs created by taking mean of NAs
-        dplyr::distinct(location, epiweek, sCh, cCh, deaths, .keep_all = TRUE) ## remove the duplicates after averaging
+        dplyr::distinct(location, epiweek, sCh, cCh, deaths, original_location_name, observation_collection_id, .keep_all = TRUE) ## remove the duplicates after averaging
     nodups <- sorted %>%
         dplyr::filter(n==1)
     
