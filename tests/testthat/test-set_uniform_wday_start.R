@@ -16,7 +16,9 @@ testthat::test_that("set_uniform_wday_start and average_duplicate_observations w
                              sep="-"),
         sCh = c(2, 10, 40, 20),
         cCh = c(0, 2, 1, 1),
-        deaths = c(0, NA, 2, NA)
+        deaths = c(0, NA, 2, NA),
+        original_location_name = rep("A",4),
+        observation_collection_id = rep(1,4)
   )
 
   avgdata <- fakedata %>%
