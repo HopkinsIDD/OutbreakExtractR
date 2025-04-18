@@ -10,7 +10,6 @@ clean_psql_data <- function(
   library(tidyverse)
 
   # clean the location names (keep updated)
-  # average duplicate observations
   # clean and add descriptive columns
   outbreak_data <- clean_location_names(original_data=original_data) %>%
     dplyr::mutate(

@@ -1,9 +1,8 @@
 #test if the correct high risk weeks are assigned
 test_that("identify_weeks_exceeding_threshold works", {
-  outbreak_ts<-readRDS("data/outbreak_data.rds")
+  outbreak_ts<-read.csv("clean_outbreak_testing_data.csv")
   outbreak_ts$threshold=0
   outbreak_ts$population=1000
-  
   outbreak_ts<-identify_weeks_exceeding_threshold(
     outbreak_data = outbreak_ts,
     threshold_col = "threshold",
@@ -15,7 +14,7 @@ test_that("identify_weeks_exceeding_threshold works", {
 
 #test when the population column is invalid
 test_that("identify_weeks_exceeding_threshold works", {
-  outbreak_ts<-readRDS("data/outbreak_data.rds")
+  outbreak_ts<-read.csv("clean_outbreak_testing_data.csv")
   testthat::expect_error(
     identify_weeks_exceeding_threshold(
       outbreak_data = outbreak_ts,
@@ -28,9 +27,9 @@ test_that("identify_weeks_exceeding_threshold works", {
 
 #test whether the low risk groups are assigned correctly
 test_that("identify_weeks_exceeding_threshold works", {
-  outbreak_ts<-readRDS("data/outbreak_data.rds")
+  outbreak_ts<-read.csv("clean_outbreak_testing_data.csv")
   outbreak_ts$threshold=10^7
-    outbreak_ts<-identify_weeks_exceeding_threshold(
+  outbreak_ts<-identify_weeks_exceeding_threshold(
       outbreak_data = outbreak_ts,
       threshold_col = "threshold",
       threshold_type = "case",
