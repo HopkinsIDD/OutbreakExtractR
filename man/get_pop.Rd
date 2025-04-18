@@ -26,6 +26,9 @@ get_pop(
 
 \item{pop_raster_path:}{path to save the pop raster file for a certain year (Estimated total number of people per grid-cell)}
 }
+\value{
+numeric
+}
 \description{
 this function is used to get population data for each location period
 }
