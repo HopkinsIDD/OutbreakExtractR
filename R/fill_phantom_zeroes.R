@@ -25,7 +25,7 @@ fill_phantom_zeroes <- function(original_data){
 
 	    df_data <- df_original %>%
 	    	dplyr::filter(location == loc) %>%
-	    	dplyr::distinct(location, TL, TR, sCh, cCh, deaths, spatial_scale, composite_loc, date_range, epiweek, start_weekday, who_region, country, admin1, admin2, admin3, admin4, admin5, location_period_id) %>%
+	    	dplyr::distinct(location, TL, TR, sCh, cCh, deaths, spatial_scale, composite_loc, date_range, epiweek, start_weekday, who_region, country, admin1, admin2, admin3, admin4, admin5, location_period_id,original_location_name,observation_collection_id) %>%
 	    	dplyr::mutate(phantom = FALSE)
 
 	    ## fill zeroes 8 weeks before earliest observation and 8 weeks after latest observation in that location 
@@ -42,7 +42,9 @@ fill_phantom_zeroes <- function(original_data){
 				start_weekday = lubridate::wday(TL, label = TRUE, abbr = FALSE)) %>%
 			dplyr::right_join(df_tmp, by = c("location")) %>%
 			dplyr::filter(!(TL %in% df_data$TL)) %>% 
-			dplyr::mutate(phantom = TRUE)
+			dplyr::mutate(phantom = TRUE,
+			              original_location_name = NA,
+			              observation_collection_id = NA)
 	  
 	  	dplyr::bind_rows(tmp, df_data) %>%
 	  		dplyr::arrange(location, TL)

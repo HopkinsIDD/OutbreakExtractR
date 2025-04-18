@@ -1,8 +1,8 @@
 #test if all daily data has been averaged to weekly
 test_that("observation_aggregator works", {
-  outbreak_ts<-readRDS("data/outbreak_data.rds")
-  daily_outbreak_ts<-outbreak_ts%>%subset(location_period_id==9931)
-  daily_outbreak_ts<-clean_psql_data(original_data=daily_outbreak_ts)
-  cleaned_outbreak_ts<-observation_aggregator(daily_outbreak_data=daily_outbreak_ts)
+  outbreak_ts<-read.csv("clean_outbreak_testing_data.csv") %>% mutate(TL = as.Date(TL), TR = as.Date(TR))
+  outbreak_ts$TL<-lubridate::ymd("2014-02-03")+1:2089
+  outbreak_ts$TR<-outbreak_ts$TL
+  cleaned_outbreak_ts<-observation_aggregator(daily_outbreak_data=outbreak_ts)
   testthat::expect_true(all(cleaned_outbreak_ts$TR-cleaned_outbreak_ts$TL+1==7))
 })
