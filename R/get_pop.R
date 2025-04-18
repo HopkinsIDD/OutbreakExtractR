@@ -78,7 +78,7 @@ estimate_adj_factors <- function(
 #' @param country_shp sf object: country geometry
 #' @param pop_raster_path: path to save the pop raster file for a certain year (Estimated total number of people per grid-cell)
 #' @param raster_dir path to save the GHS pop raster file for a certain year
-#' @return 
+#' @return numeric
 get_pop <- function(
     shp= shp,
     year = 2000,

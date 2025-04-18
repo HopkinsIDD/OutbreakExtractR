@@ -27,6 +27,9 @@ get_outbreak_threshold(
 
 \item{customized_TR:}{customize the upper bound of time for outbreak estimation}
 }
+\value{
+dataframe
+}
 \description{
 this function will be used in the identify_outbreak** functions. 1. average weekly/daily incidence across the whole study time period. 2. a fixed number. 3. changing outbreak threshold (for instance: the average weekly/daily cases of the first three weeks).
 }
