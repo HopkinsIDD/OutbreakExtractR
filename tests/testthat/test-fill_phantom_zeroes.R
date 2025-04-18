@@ -8,7 +8,8 @@ testthat::test_that("fill_phantom_zeroes works", {
                      sCh = c(167,140),
                      date_range = 7,
                      spatial_scale = "admin1", composite_loc = FALSE, who_region = "AFR", country = "C", admin1 = "A", admin2 = NA, admin3 = NA, admin4 = NA, admin5 = NA, 
-                     cCh = NA, deaths = NA, epiweek = c("2024-01","2024-02"))
+                     cCh = NA, deaths = NA, epiweek = c("2024-01","2024-02"),
+                     original_location_name = c("A","A"),observation_collection_id= c(1,1))
   testthat::expect_equal(nrow(fill_phantom_zeroes(test)),18)
   testthat::expect_equal(sum(fill_phantom_zeroes(test)$sCh), 307)
   testthat::expect_equal(min(fill_phantom_zeroes(test)$TL), as.Date("2024-08-26"))
@@ -26,7 +27,8 @@ testthat::test_that("fill_phantom_zeroes works", {
                      sCh = c(167,140),
                      date_range = 7,
                      spatial_scale = "admin1", composite_loc = FALSE, who_region = "AFR", country = "C", admin1 = "A", admin2 = NA, admin3 = NA, admin4 = NA, admin5 = NA, 
-                     cCh = NA, deaths = NA, epiweek = c("2024-01","2024-04"))
+                     cCh = NA, deaths = NA, epiweek = c("2024-01","2024-04"),
+                     original_location_name = c("A","A"),observation_collection_id= c(1,1))
   testthat::expect_equal(nrow(fill_phantom_zeroes(test1)),20)
   testthat::expect_equal(sum(fill_phantom_zeroes(test1)$sCh), 307)
   testthat::expect_equal(min(fill_phantom_zeroes(test1)$TL), as.Date("2024-08-26"))
