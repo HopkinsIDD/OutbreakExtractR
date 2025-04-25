@@ -5,7 +5,7 @@
 #' @return a 'long' version of the alerts dataframe with columns for the alert_id, location, TL, spatial scale, country, alert number (numeric), and alert type
 #' @export
 format_alerts <- function(alerts_df){
-  alert_id_columns <- paste0("alert", 1:24, "_id")
+  alert_id_columns <- grep("^alert\\d+_id$", names(alerts_df), value = TRUE) ## avoiding hard-coded alert numbers 
   alerts_df <- tidyr::pivot_longer(alerts_df, cols = alert_id_columns,
                                    names_to = "alert_column",
                                    values_to = "alert_id") %>%

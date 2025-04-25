@@ -5,57 +5,73 @@
 #' @param dat dataframe
 add_unique_alert_ids <- function(dat){
 
-  dat %>%
-    
-  ## create alert ids using the preprocessed alerts
-    dplyr::mutate(alert1_id = dplyr::case_when(alert1 ~ paste("a1", location, TL, sep = "_"),
-                                              !alert1 ~ NA),
-                  alert2_id = dplyr::case_when(alert2 ~ paste("a2", location, TL, sep = "_"),
-                                              !alert2 ~ NA),
-                  alert3_id = dplyr::case_when(alert3 ~ paste("a3", location, TL, sep = "_"),
-                                              !alert3 ~ NA),
-                  alert4_id = dplyr::case_when(alert4 ~ paste("a4", location, TL, sep = "_"),
-                                              !alert4 ~ NA),
-                  alert5_id = dplyr::case_when(alert5 ~ paste("a5", location, TL, sep = "_"),
-                                              !alert5 ~ NA),
-                  alert6_id = dplyr::case_when(alert6 ~ paste("a6", location, TL, sep = "_"),
-                                               !alert6 ~ NA),
-                  alert7_id = dplyr::case_when(alert7 ~ paste("a7", location, TL, sep = "_"),
-                                               !alert7 ~ NA),
-                  alert8_id = dplyr::case_when(alert8 ~ paste("a8", location, TL, sep = "_"),
-                                               !alert8 ~ NA),
-                  alert9_id = dplyr::case_when(alert9 ~ paste("a9", location, TL, sep = "_"),
-                                               !alert9 ~ NA),
-                  alert10_id = dplyr::case_when(alert10 ~ paste("a10", location, TL, sep = "_"),
-                                               !alert10 ~ NA),
-                  alert11_id = dplyr::case_when(alert11 ~ paste("a11", location, TL, sep = "_"),
-                                               !alert11 ~ NA),
-                  alert12_id = dplyr::case_when(alert12 ~ paste("a12", location, TL, sep = "_"),
-                                               !alert12 ~ NA),
-                  alert13_id = dplyr::case_when(alert13 ~ paste("a13", location, TL, sep = "_"),
-                                               !alert13 ~ NA),
-                  alert14_id = dplyr::case_when(alert14 ~ paste("a14", location, TL, sep = "_"),
-                                               !alert14 ~ NA),
-                  alert15_id = dplyr::case_when(alert15 ~ paste("a15", location, TL, sep = "_"),
-                                               !alert15 ~ NA),
-                  alert16_id = dplyr::case_when(alert16 ~ paste("a16", location, TL, sep = "_"),
-                                               !alert16 ~ NA),
-                  alert17_id = dplyr::case_when(alert17 ~ paste("a17", location, TL, sep = "_"),
-                                               !alert17 ~ NA),
-                  alert18_id = dplyr::case_when(alert18 ~ paste("a18", location, TL, sep = "_"),
-                                                !alert18 ~ NA),
-                  alert19_id = dplyr::case_when(alert19 ~ paste("a19", location, TL, sep = "_"),
-                                                !alert19 ~ NA),
-                  alert20_id = dplyr::case_when(alert20 ~ paste("a20", location, TL, sep = "_"),
-                                                !alert20 ~ NA),
-                  alert21_id = dplyr::case_when(alert21 ~ paste("a21", location, TL, sep = "_"),
-                                                !alert21 ~ NA),
-                  alert22_id = dplyr::case_when(alert22 ~ paste("a22", location, TL, sep = "_"),
-                                                !alert22 ~ NA),
-                  alert23_id = dplyr::case_when(alert23 ~ paste("a23", location, TL, sep = "_"),
-                                                !alert23 ~ NA),
-                  alert24_id = dplyr::case_when(alert24 ~ paste("a24", location, TL, sep = "_"),
-                                                !alert24 ~ NA))
+  # dat %>%
+  #   
+  # ## create alert ids using the preprocessed alerts
+  #   dplyr::mutate(alert1_id = dplyr::case_when(alert1 ~ paste("a1", location, TL, sep = "_"),
+  #                                             !alert1 ~ NA),
+  #                 alert2_id = dplyr::case_when(alert2 ~ paste("a2", location, TL, sep = "_"),
+  #                                             !alert2 ~ NA),
+  #                 alert3_id = dplyr::case_when(alert3 ~ paste("a3", location, TL, sep = "_"),
+  #                                             !alert3 ~ NA),
+  #                 alert4_id = dplyr::case_when(alert4 ~ paste("a4", location, TL, sep = "_"),
+  #                                             !alert4 ~ NA),
+  #                 alert5_id = dplyr::case_when(alert5 ~ paste("a5", location, TL, sep = "_"),
+  #                                             !alert5 ~ NA),
+  #                 alert6_id = dplyr::case_when(alert6 ~ paste("a6", location, TL, sep = "_"),
+  #                                              !alert6 ~ NA),
+  #                 alert7_id = dplyr::case_when(alert7 ~ paste("a7", location, TL, sep = "_"),
+  #                                              !alert7 ~ NA),
+  #                 alert8_id = dplyr::case_when(alert8 ~ paste("a8", location, TL, sep = "_"),
+  #                                              !alert8 ~ NA),
+  #                 alert9_id = dplyr::case_when(alert9 ~ paste("a9", location, TL, sep = "_"),
+  #                                              !alert9 ~ NA),
+  #                 alert10_id = dplyr::case_when(alert10 ~ paste("a10", location, TL, sep = "_"),
+  #                                              !alert10 ~ NA),
+  #                 alert11_id = dplyr::case_when(alert11 ~ paste("a11", location, TL, sep = "_"),
+  #                                              !alert11 ~ NA),
+  #                 alert12_id = dplyr::case_when(alert12 ~ paste("a12", location, TL, sep = "_"),
+  #                                              !alert12 ~ NA),
+  #                 alert13_id = dplyr::case_when(alert13 ~ paste("a13", location, TL, sep = "_"),
+  #                                              !alert13 ~ NA),
+  #                 alert14_id = dplyr::case_when(alert14 ~ paste("a14", location, TL, sep = "_"),
+  #                                              !alert14 ~ NA),
+  #                 alert15_id = dplyr::case_when(alert15 ~ paste("a15", location, TL, sep = "_"),
+  #                                              !alert15 ~ NA),
+  #                 alert16_id = dplyr::case_when(alert16 ~ paste("a16", location, TL, sep = "_"),
+  #                                              !alert16 ~ NA),
+  #                 alert17_id = dplyr::case_when(alert17 ~ paste("a17", location, TL, sep = "_"),
+  #                                              !alert17 ~ NA),
+  #                 alert18_id = dplyr::case_when(alert18 ~ paste("a18", location, TL, sep = "_"),
+  #                                               !alert18 ~ NA),
+  #                 alert19_id = dplyr::case_when(alert19 ~ paste("a19", location, TL, sep = "_"),
+  #                                               !alert19 ~ NA),
+  #                 alert20_id = dplyr::case_when(alert20 ~ paste("a20", location, TL, sep = "_"),
+  #                                               !alert20 ~ NA),
+  #                 alert21_id = dplyr::case_when(alert21 ~ paste("a21", location, TL, sep = "_"),
+  #                                               !alert21 ~ NA),
+  #                 alert22_id = dplyr::case_when(alert22 ~ paste("a22", location, TL, sep = "_"),
+  #                                               !alert22 ~ NA),
+  #                 alert23_id = dplyr::case_when(alert23 ~ paste("a23", location, TL, sep = "_"),
+  #                                               !alert23 ~ NA),
+  #                 alert24_id = dplyr::case_when(alert24 ~ paste("a24", location, TL, sep = "_"),
+  #                                               !alert24 ~ NA))
+  # 
   
+  alert_cols <- grep("^alert\\d+$", names(dat), value = TRUE)
+  
+  for (col in alert_cols) {
+    col_sym <- rlang::sym(col)
+    alert_num <- stringr::str_extract(col, "\\d+")
+    new_col <- paste0("alert", alert_num, "_id")
+    
+    dat <- dat %>%
+      dplyr::mutate(!!new_col := dplyr::case_when(
+        !!col_sym ~ paste(paste0("a", alert_num), location, TL, sep = "_"),
+        TRUE ~ NA_character_
+      ))
+  }
+  
+  return(dat)
   
 }
