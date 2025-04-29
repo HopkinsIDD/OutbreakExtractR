@@ -23,47 +23,52 @@ estimate_adj_factors <- function(
     stop("WPP2022 must contain columns: ", paste(required_cols, collapse = ", "))
   }
   
-    # Adjust year if it exceeds the range
-    year <- if (year > 2020) 2020 else year
-    
-    # Validate year
-    if (any(!(year %in% WPP2022$Time))) {
-      stop("Invalid year: ", year, ". Must fall within the UN time range: ",
-           paste0(range(WPP2022$Time), collapse = "-"))
-    }
-    
-    # Construct file path for the raster
-    pop_file_path <- file.path(raster_dir, paste0(tolower(country), "_ppp_", year, ".tif"))
-    
-    # Download raster if missing
-    if (!file.exists(pop_file_path)) {
-      message("Downloading raster for ", country, " (", year, ")...")
-      pop_file_path <- wpgpDownloadR::wpgpGetCountryDataset(
-        ISO3 = country,
-        covariate = paste0("ppp_", year),
-        destDir = dest_dir,
-        method = "curl"
-      )
-    }
-    
-    # Load raster and calculate population
-    pop_raster <- raster::raster(pop_file_path)
-    
-    # Get the country-level shapefile
-    if(is.null(country_shp)){
-      country_shp <- rgeoboundaries::gb_adm0(country=country)
-    }
-    
-    pop <- exactextractr::exact_extract(pop_raster, country_shp$geometry, "sum")
-    
-    # Get total UN population
-    tot_UN <- WPP2022$PopTotal[WPP2022$Time == year & WPP2022$ISO3_code == country] * 1e3
-    
-    # Calculate adjustment factor
-    adj_factors <- tot_UN / pop
-    
-    # Clean up
-    rm(pop_raster)
+  # Adjust year if it exceeds the range
+  year <- if (year > 2020) 2020 else year
+  
+  # Validate year
+  if (any(!(year %in% WPP2022$Time))) {
+    stop("Invalid year: ", year, ". Must fall within the UN time range: ",
+         paste0(range(WPP2022$Time), collapse = "-"))
+  }
+  
+  # Construct file path for the raster
+  pop_file_path <- file.path(raster_dir, paste0(tolower(country), "_ppp_", year, ".tif"))
+  
+  # Download raster if missing
+  if (!file.exists(pop_file_path)) {
+    message("Downloading raster for ", country, " (", year, ")...")
+    pop_file_path <- wpgpDownloadR::wpgpGetCountryDataset(
+      ISO3 = country,
+      covariate = paste0("ppp_", year),
+      destDir = dest_dir,
+      method = "curl"
+    )
+  }
+  
+  # Load raster and calculate population
+  pop_raster <- raster::raster(pop_file_path)
+  
+  # Get the country-level shapefile
+  if(is.null(country_shp)){
+    country_shp <- rgeoboundaries::gb_adm0(country=country)
+  }
+  
+  pop <- exactextractr::exact_extract(pop_raster, country_shp$geometry, "sum")
+  
+  ## CA 1 Apr: Ensure single value
+  if (length(pop) > 1) {
+    message("multiple population values found when estimating adj values")
+  }
+  
+  # Get total UN population
+  tot_UN <- WPP2022$PopTotal[WPP2022$Time == year & WPP2022$ISO3_code == country] * 1e3
+  
+  # Calculate adjustment factor
+  adj_factors <- tot_UN / pop
+  
+  # Clean up
+  rm(pop_raster)
   
   return(adj_factors)
 }
@@ -125,9 +130,15 @@ get_pop <- function(
     
     pop_export <- pop_2020/pop_country_2020*pop_country_after_2020
     
-  }else{
+  } else{
     pop_raster <- raster::raster(raster_file)
     pop <- exactextractr::exact_extract(pop_raster, shp$geometry,'sum')
+    
+    ## CA 1 Apr debug NER issue: Ensure single value for pop
+    if (length(pop) > 1) {
+      message("`exact_extract` returned multiple values for a single row")
+    }
+    
     # Aligning worldpop estimates to the UN population estiamtes at the country level
     adj_factors <- estimate_adj_factors(
       country = country, 
@@ -137,10 +148,10 @@ get_pop <- function(
       country_shp = country_shp
     )
   pop_export <- pop * adj_factors
-}
+  }
   
   # Check if pop is 0, if so, replace the pop with GHS population 
-  if(pop_export ==0 ){
+  if(pop_export == 0){
     cat("The population estimated based on worldpop is 0. Replace it with the GHS population")
     
     if(is.null(raster_dir) == T) {

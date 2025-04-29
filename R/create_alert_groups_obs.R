@@ -34,14 +34,20 @@ create_alert_groups <- function(df, alert_cols) {
         ## initialize alert group with the TRUE rows
         group_rows <- data[group_start_index:(group_start_index + rle_alerts$lengths[i] - 1), , drop = FALSE]
         
-        ## make the alert group ID using the location, epiweek, and alert type
-        alert_group_id <- paste0("a", gsub("alert", "", alert_col), "_", data$location[group_start_index], "_", data$epiweek[group_start_index])
-        
         ## keep adding rows until another TRUE appears (this will start a new group)
         for (j in seq(from = group_start_index + rle_alerts$lengths[i], to = nrow(data))) {  
           if (data[[alert_col]][j] == TRUE) break  
           group_rows <- rbind(group_rows, data[j, , drop = FALSE])  
         }
+        
+        ## extract start and end epiweek of the alert group
+        start_epiweek <- data$epiweek[group_start_index]
+        end_epiweek <- tail(group_rows$epiweek, 1)  
+        
+        ## make the alert group ID using the location, start and end epiweek, and alert type
+        alert_group_id <- paste0("a", gsub("alert", "", alert_col), "_", 
+                                 data$location[group_start_index], "_", 
+                                 start_epiweek, "_", end_epiweek)
         
         ## assign alert group ID to the rows in current group
         group_rows[[paste0(alert_col, "_group_id")]] <- alert_group_id
