@@ -17,9 +17,7 @@ estimate_adj_factors <- function(
     dest_dir = "data") {
   
   # Check if required columns are present in WPP2022
-  ## CA Mar 27: commenting out line below as in the ca branch this file is not yet part of the package data
-  #data("WPP2022", package = "OutbreakExtractR")
-  WPP2022 <- readRDS('data/WPP2022.rds')
+  data("WPP2022", package = "OutbreakExtractR")
   required_cols <- c("Time", "ISO3_code", "PopTotal")
   if (!all(required_cols %in% colnames(WPP2022))) {
     stop("WPP2022 must contain columns: ", paste(required_cols, collapse = ", "))
@@ -85,7 +83,7 @@ estimate_adj_factors <- function(
 #' @param country_shp sf object: country geometry
 #' @param pop_raster_path: path to save the pop raster file for a certain year (Estimated total number of people per grid-cell)
 #' @param raster_dir path to save the GHS pop raster file for a certain year
-#' @return 
+#' @return numeric
 get_pop <- function(
     shp= shp,
     year = 2000,
@@ -123,8 +121,6 @@ get_pop <- function(
     
     pop_2020 <- exactextractr::exact_extract(pop_raster_2020, shp$geometry,'sum') * adj_factors
     
-    WPP2022 <- readRDS('data/WPP2022.rds') ## CA 27 Mar: added to get population for years after 2020
-    
     pop_country_2020 <- WPP2022[WPP2022$ISO3_code == country & WPP2022$Time == 2020,]$PopTotal  * 1e3
     pop_country_after_2020 <- WPP2022[WPP2022$ISO3_code == country & WPP2022$Time == year,]$PopTotal * 1e3
     
@@ -134,10 +130,9 @@ get_pop <- function(
     
     pop_export <- pop_2020/pop_country_2020*pop_country_after_2020
     
-  }else{
+  } else{
     pop_raster <- raster::raster(raster_file)
     pop <- exactextractr::exact_extract(pop_raster, shp$geometry,'sum')
-    
     
     ## CA 1 Apr debug NER issue: Ensure single value for pop
     if (length(pop) > 1) {
@@ -152,11 +147,11 @@ get_pop <- function(
       dest_dir = pop_raster_path,
       country_shp = country_shp
     )
-    pop_export <- pop * adj_factors
+  pop_export <- pop * adj_factors
   }
   
   # Check if pop is 0, if so, replace the pop with GHS population 
-  if(pop_export ==0 ){
+  if(pop_export == 0){
     cat("The population estimated based on worldpop is 0. Replace it with the GHS population")
     
     if(is.null(raster_dir) == T) {
