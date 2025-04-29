@@ -1,11 +1,11 @@
 #' @export
-#' @title trigger_rate_alert
-#' @name trigger_rate_alert
+#' @title trigger_alert_rate
+#' @name trigger_alert_rate
 #' @description Triggers rate-based alerts 18-24 according to patterns in incidence rate trends per 10000 people
 #' @param original_data dataframe of pre-alert time series extractions
 #' @return dataframe
 
-trigger_rate_alert <- function(original_data){
+trigger_alert_rate <- function(original_data){
   
   tmp_function <- function(df_original, loc){
     df_tmp <- dplyr::filter(df_original, location == loc)
