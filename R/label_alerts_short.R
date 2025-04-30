@@ -8,5 +8,5 @@
 label_alerts_short <- function(basedf, is_ordered = FALSE){
   
   basedf %>%
-    dplyr::mutate(alert_lab = factor(alert_number, levels = 1:17, labels = c(paste0(c("1", "2", "3"), "-week"), paste(c("\U2265 2", "\U2265 5", "\U2265 10", "\U2265 25", "\U2265 50", "\U2265 100", "\U2265 250"), "weekly"), paste(c("\U2265 5", "\U2265 10", "\U2265 25", "\U2265 50", "\U2265 100", "\U2265 500", "\U2265 1000"), "total")), ordered = is_ordered))
+    dplyr::mutate(alert_lab = factor(alert_number, levels = 1:24, labels = c(paste0(c("1", "2", "3"), "-week"), paste(c("\U2265 2", "\U2265 5", "\U2265 10", "\U2265 25", "\U2265 50", "\U2265 100", "\U2265 250"), "weekly"), paste(c("\U2265 5", "\U2265 10", "\U2265 25", "\U2265 50", "\U2265 100", "\U2265 500", "\U2265 1000"), "total"), paste(c("\U2265 .25", "\U2265 .5", "\U2265 1", "\U2265 1.5", "\U2265 2.5", "\U2265 5", "\U2265 7.5"), "per 10K")), ordered = is_ordered))
 }
