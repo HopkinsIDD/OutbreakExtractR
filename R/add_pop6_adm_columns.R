@@ -1,11 +1,11 @@
-#' Title add_pop_adm_columns
-#' @name add_pop_adm_columns
+#' Title add_pop6_adm_columns
+#' @name add_pop6_adm_columns
 #' @param basedf a df with alert_id column, can be an alert or an alert group df
 #' @param popdf a pre-outbreak df
 #' @description Attach population and spatial scale columns from pre-outbreak extraction to a dataset with an alert_id
 #' @return the df with an alert_id column with added columns for population size and spatial scale
 #' @export
-add_pop_adm_columns <- function(basedf, popdf){
+add_pop6_adm_columns <- function(basedf, popdf){
   
   if("pop" %in% names(basedf)){
     basedf <- dplyr::select(basedf, -pop, -pop_brk)
