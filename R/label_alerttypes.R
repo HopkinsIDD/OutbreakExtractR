@@ -7,5 +7,5 @@
 label_alerttypes <- function(basedf){
   
   basedf %>%
-    dplyr::mutate(alert_type = factor(alert_type, levels = c("case", "cumsum", "rate", "trend"), labels = c("weekly case", "cum case", "rate", "trend"), ordered = TRUE))
+    dplyr::mutate(alert_type = factor(alert_type, levels = c("case", "cumsum", "rate", "trend"), labels = c("case", "cum case", "rate", "trend"), ordered = TRUE))
 }
