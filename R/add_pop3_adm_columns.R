@@ -34,7 +34,7 @@ add_pop3_adm_columns <- function(basedf, popdf){
   
   rc <- dplyr::left_join(clean_basedf, clean_pop, by = c("uq_ids")) %>%
     dplyr::select(-uq_ids) %>%
-    dplyr::mutate(pop_brk = cut(pop, breaks = c(0, 50000, 1E6, max(popdf$pop)), labels = c("< 50k", "[50k, 1M)", "\U2265 1M"), include.lowest=T, right=FALSE))
+    dplyr::mutate(pop_brk = cut(pop, breaks = c(0, 50000, 500000, max(popdf$pop)), labels = c("< 50k", "[50k, 500k)", "\U2265 500k"), include.lowest=T, right=FALSE))
   
   return(rc)
 }
