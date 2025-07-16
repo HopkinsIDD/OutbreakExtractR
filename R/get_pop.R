@@ -16,20 +16,20 @@ estimate_adj_factors <- function(
     raster_dir = "data/raster", 
     dest_dir = "data") {
   
-  # Check if required columns are present in WPP2022
-  data("WPP2022", package = "OutbreakExtractR")
+  # Check if required columns are present in WPP2024
+  data("WPP2024", package = "OutbreakExtractR") ## possibly not necessary now that WPP2024 is lazily loaded 
   required_cols <- c("Time", "ISO3_code", "PopTotal")
-  if (!all(required_cols %in% colnames(WPP2022))) {
-    stop("WPP2022 must contain columns: ", paste(required_cols, collapse = ", "))
+  if (!all(required_cols %in% colnames(WPP2024))) {
+    stop("WPP2024 must contain columns: ", paste(required_cols, collapse = ", "))
   }
   
   # Adjust year if it exceeds the range
   year <- if (year > 2020) 2020 else year
   
   # Validate year
-  if (any(!(year %in% WPP2022$Time))) {
+  if (any(!(year %in% WPP2024$Time))) {
     stop("Invalid year: ", year, ". Must fall within the UN time range: ",
-         paste0(range(WPP2022$Time), collapse = "-"))
+         paste0(range(WPP2024$Time), collapse = "-"))
   }
   
   # Construct file path for the raster
@@ -62,7 +62,7 @@ estimate_adj_factors <- function(
   }
   
   # Get total UN population
-  tot_UN <- WPP2022$PopTotal[WPP2022$Time == year & WPP2022$ISO3_code == country] * 1e3
+  tot_UN <- WPP2024$PopTotal[WPP2024$Time == year & WPP2024$ISO3_code == country] * 1e3
   
   # Calculate adjustment factor
   adj_factors <- tot_UN / pop
@@ -121,8 +121,8 @@ get_pop <- function(
     
     pop_2020 <- exactextractr::exact_extract(pop_raster_2020, shp$geometry,'sum') * adj_factors
     
-    pop_country_2020 <- WPP2022[WPP2022$ISO3_code == country & WPP2022$Time == 2020,]$PopTotal  * 1e3
-    pop_country_after_2020 <- WPP2022[WPP2022$ISO3_code == country & WPP2022$Time == year,]$PopTotal * 1e3
+    pop_country_2020 <- WPP2024[WPP2024$ISO3_code == country & WPP2024$Time == 2020,]$PopTotal  * 1e3
+    pop_country_after_2020 <- WPP2024[WPP2024$ISO3_code == country & WPP2024$Time == year,]$PopTotal * 1e3
     
     if(length(pop_country_after_2020)>1){ # for years after 2022, there are multiple UN pop estimates and the average of them is used.
       pop_country_after_2020 = mean(pop_country_after_2020,na.rm=T)
