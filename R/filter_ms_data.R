@@ -22,9 +22,8 @@ filter_ms_data <- function(df,
   which_setting <- match.arg(which_setting)
   
   ## access endemic locations from package data
-  endemic_locs <- OutbreakExtractR::endemic_locs_gte50nz_3ydata
+  endemic_locs <- dplyr::pull(OutbreakExtractR::endemic_locs_gte50nz_3ydata, location)
   
-  ## messages
   if (incl_trend_alerts) {
     message("Removing country-level locations")
     tmp <- df %>%
