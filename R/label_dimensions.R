@@ -8,5 +8,5 @@
 label_dimensions <- function(basedf, is_ordered = TRUE){
   
   basedf %>%
-    dplyr::mutate(dimension = factor(dimension, levels = c("std_impact", "std_eff", "std_ppv", "std_missed", "std_delay"), labels = c("Impact", "Efficiency", "PPV", "Missed", "Delay"), ordered = is_ordered))
+    dplyr::mutate(dimension = factor(dimension, levels = c("std_impact", "std_eff", "std_ppv", "std_missed", "std_delay"), labels = c("Impact", "Efficiency", "PPV", "Missed", "Timeliness"), ordered = is_ordered))
 }
