@@ -16,7 +16,14 @@ identify_outbreaks <- function(
     original_data,
     zero_case_assumption = T,
     customized_TL = NULL,
-    customized_TR = NULL
+    customized_TR = NULL,
+    outbreak_start_definition = c("consecutive","dual_window"), 
+    min_weeks_above = 2,
+    require_increasing_trend = FALSE,
+    window_weeks = 3,
+    cumulative_windows = 3,
+    cumulative_case_threshold_ratio = 1.5,
+    tail_period =6
     ){
   
   # Identify cholera outbreak thresholds
@@ -38,9 +45,15 @@ identify_outbreaks <- function(
     new_outbreak_by_location=data.frame()
     
     # extract outbreak start and end
-    preoutbreak_by_location_start<-OutbreakExtractR::identify_epidemic_start(outbreak_data = preoutbreak_by_location)
+    preoutbreak_by_location_start<-OutbreakExtractR::identify_epidemic_start(outbreak_data = preoutbreak_by_location,
+                                                                             outbreak_start_definition = outbreak_start_definition, 
+                                                                             require_increasing_trend = require_increasing_trend,
+                                                                             min_weeks_above = min_weeks_above,
+                                                                             window_weeks = window_weeks,
+                                                                             cumulative_windows = cumulative_windows,
+                                                                             cumulative_case_threshold_ratio = cumulative_case_threshold_ratio)
     
-    preoutbreak_by_location_start_end_washout<-OutbreakExtractR::identify_epidemic_tail(outbreak_data = preoutbreak_by_location_start, tail_period = 6)
+    preoutbreak_by_location_start_end_washout<-OutbreakExtractR::identify_epidemic_tail(outbreak_data = preoutbreak_by_location_start, tail_period = tail_period)
     
     # get the row idx for epidemic start
     preoutbreak_by_location_start_end_washout$row_idx = rownames(preoutbreak_by_location_start_end_washout)
@@ -53,7 +66,7 @@ identify_outbreaks <- function(
         for (idx in seq(length(epidemic_start_row_idx)-1)) {
           
           data_between_epidemic_start = preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:epidemic_start_row_idx[idx+1],]
-          if(any(data_between_epidemic_start$epidemic_tail)){
+          if(any(data_between_epidemic_start$epidemic_tail) & nrow(data_between_epidemic_start)>=tail_period+2){
             outbreak_end = min(as.numeric(data_between_epidemic_start[data_between_epidemic_start$epidemic_tail,]$row_idx))
             preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:as.numeric(as.numeric(outbreak_end)+2-1),]$outbreak_number = 
               min(outbreak_number_idx,preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:as.numeric(as.numeric(outbreak_end)+2-1),]$outbreak_number[preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:as.numeric(as.numeric(outbreak_end)+2-1),]$outbreak_number>0])
