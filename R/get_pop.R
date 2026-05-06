@@ -1,4 +1,31 @@
 # Helper function
+#' Download country-specific constrained world pop 100*100m raster (2015-2030) from the worldpop data repo: 
+#' @param country country iso code
+#' @param year the year of the population raster
+#' @param dest_dir folder name where the downloaded population raster will be saved
+download_worldpop_constrained <- function(country, year, dest_dir = "worldpop") {
+  if (!dir.exists(dest_dir)) dir.create(dest_dir)
+  
+  out_file <- file.path(
+    dest_dir,
+    paste0(tolower(country), "_pop_", year, "_CN_100m_R2025A_v1.tif")
+  )
+  
+  if (file.exists(out_file)) return(out_file)
+  
+  url <- paste0(
+    "https://data.worldpop.org/GIS/Population/Global_2015_2030/",
+    "R2025A/", year, "/", country,
+    "/v1/100m/constrained/",
+    tolower(country), "_pop_", year, "_CN_100m_R2025A_v1.tif"
+  )
+  
+  message("Downloading WorldPop constrained raster: ", url)
+  curl::curl_download(url, out_file)
+  
+  return(out_file)
+}
+
 #' Estimate Adjustment Factors for Population Data (for years >=2021, use the adjustment factors at 2020 instead)
 #'
 #' @param year numeric vector: Years for which population needs to be estimated.
@@ -32,21 +59,12 @@ estimate_adj_factors <- function(
          paste0(range(WPP2024$Time), collapse = "-"))
   }
   
-  # Construct file path for the raster
-  pop_file_path <- file.path(raster_dir, paste0(tolower(country), "_ppp_", year, ".tif"))
-  
-  # Download raster if missing
-  if (!file.exists(pop_file_path)) {
-    message("Downloading raster for ", country, " (", year, ")...")
-    pop_file_path <- wpgpDownloadR::wpgpGetCountryDataset(
-      ISO3 = country,
-      covariate = paste0("ppp_", year),
-      destDir = dest_dir,
-      method = "curl"
-    )
-  }
-  
-  # Load raster and calculate population
+  # download and load population raster
+  pop_file_path <- download_worldpop_constrained(
+    country = country,
+    year = year,
+    dest_dir = raster_dir
+  )
   pop_raster <- raster::raster(pop_file_path)
   
   # Get the country-level shapefile
@@ -73,6 +91,7 @@ estimate_adj_factors <- function(
   return(adj_factors)
 }
 
+#' Estimate population function - updated in May 2026: use the updated population raster between 2015-2030
 #' @export
 #' @title get_pop
 #' @name get_pop
@@ -97,58 +116,37 @@ get_pop <- function(
     dir.create(pop_raster_path)
   }
   
-  pop_year <- if (year > 2020) 2020 else year
+  data("WPP2024", package = "OutbreakExtractR")
   
-  raster_file <- paste0(pop_raster_path,"/",country,"_ppp_",pop_year,'.tif')
-  if(!file.exists(raster_file)){
-    raster_file <- wpgpDownloadR::wpgpGetCountryDataset(ISO3 = country,
-                                                        covariate = paste0("ppp_",pop_year),
-                                                        destDir = pop_raster_path,
-                                                        method = "curl")
-  }
+  country <- toupper(country)
+  year <- as.integer(year)
   
-  if(year > 2020){
-    pop_raster_2020 <- raster::raster(raster_file)
-    
-    # Aligning worldpop estimates to the UN population estiamtes at the country level
-    adj_factors <- estimate_adj_factors(
-      country = country, 
-      year = 2020, 
-      raster_dir = pop_raster_path, 
-      dest_dir = pop_raster_path,
-      country_shp = country_shp
-    )
-    
-    pop_2020 <- exactextractr::exact_extract(pop_raster_2020, shp$geometry,'sum') * adj_factors
-    
-    pop_country_2020 <- WPP2024[WPP2024$ISO3_code == country & WPP2024$Time == 2020,]$PopTotal  * 1e3
-    pop_country_after_2020 <- WPP2024[WPP2024$ISO3_code == country & WPP2024$Time == year,]$PopTotal * 1e3
-    
-    if(length(pop_country_after_2020)>1){ # for years after 2022, there are multiple UN pop estimates and the average of them is used.
-      pop_country_after_2020 = mean(pop_country_after_2020,na.rm=T)
-    }
-    
-    pop_export <- pop_2020/pop_country_2020*pop_country_after_2020
-    
-  } else{
-    pop_raster <- raster::raster(raster_file)
-    pop <- exactextractr::exact_extract(pop_raster, shp$geometry,'sum')
-    
-    ## CA 1 Apr debug NER issue: Ensure single value for pop
-    if (length(pop) > 1) {
-      message("`exact_extract` returned multiple values for a single row")
-    }
-    
-    # Aligning worldpop estimates to the UN population estiamtes at the country level
-    adj_factors <- estimate_adj_factors(
-      country = country, 
-      year = year, 
-      raster_dir = pop_raster_path, 
-      dest_dir = pop_raster_path,
-      country_shp = country_shp
-    )
+  # Get the population raster
+  raster_file <- download_worldpop_constrained(
+    country = country,
+    year = year,
+    dest_dir = pop_raster_path
+  )
+  
+  pop_raster <- raster::raster(raster_file)
+  
+  # Calculate population data
+  pop <- exactextractr::exact_extract(
+    pop_raster,
+    shp$geometry,
+    "sum"
+  )
+  
+  # Extract country-year specific adjusting factors to align with UN pop 2024 version
+  adj_factors <- estimate_adj_factors(
+    country = country,
+    year = year,
+    raster_dir = pop_raster_path,
+    dest_dir = pop_raster_path,
+    country_shp = country_shp
+  )
+  
   pop_export <- pop * adj_factors
-  }
   
   # Check if pop is 0, if so, replace the pop with GHS population 
   if(pop_export == 0){
@@ -168,5 +166,8 @@ get_pop <- function(
     }
   }
   
-  return(pop_export)
+  return(list(
+    estimated_pop = pop_export,
+    adj_factors = adj_factors # also return the adjusting factors in the output
+  ))
 }
