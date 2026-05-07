@@ -8,10 +8,10 @@ identify_epidemic_tail <- function (
 ){
   outbreak_data$epidemic_tail <- FALSE
   #identify tails of outbreaks
-  ## 1. below outbreak threshold. 2. for certain number of consecutive weeks
+  ## 1. below outbreak threshold. 2. for certain number of consecutive weeks. 3. not a outbreak start.
   
   consecutive_vector <- rep(TRUE,nrow(outbreak_data))
-  below_threshold_vector <- outbreak_data$risk == "low"
+  below_threshold_vector <- outbreak_data$risk == "low" & !outbreak_data$epidemic_start
   tail_vector <- consecutive_vector*below_threshold_vector
 
   tail_position <- rle(tail_vector)
