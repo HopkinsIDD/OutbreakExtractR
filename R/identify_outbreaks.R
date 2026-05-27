@@ -20,9 +20,13 @@ identify_outbreaks <- function(
     outbreak_start_definition = c("consecutive","dual_window"), 
     min_weeks_above = 2,
     require_increasing_trend = FALSE,
-    window_weeks = 3,
-    cumulative_windows = 3,
-    cumulative_case_threshold_ratio = 1.5,
+    window_weeks = window_weeks,
+    cumulative_windows = cumulative_windows,
+    cumulative_case_threshold_ratio = cumulative_case_threshold_ratio,
+    cumulative_trigger_type=cumulative_trigger_type,
+    use_cumulative_trigger=use_cumulative_trigger,
+    cumulative_min_cases=cumulative_min_cases,
+    nonzero_windows = nonzero_windows,
     tail_period =6
     ){
   
@@ -50,9 +54,12 @@ identify_outbreaks <- function(
                                                                              require_increasing_trend = require_increasing_trend,
                                                                              min_weeks_above = min_weeks_above,
                                                                              window_weeks = window_weeks,
+                                                                             use_cumulative_trigger=use_cumulative_trigger,
+                                                                             cumulative_trigger_type=cumulative_trigger_type,
                                                                              cumulative_windows = cumulative_windows,
-                                                                             cumulative_case_threshold_ratio = cumulative_case_threshold_ratio)
-    
+                                                                             cumulative_case_threshold_ratio = cumulative_case_threshold_ratio,
+                                                                             cumulative_min_cases=cumulative_min_cases,
+                                                                             nonzero_windows = nonzero_windows)
     preoutbreak_by_location_start_end_washout<-OutbreakExtractR::identify_epidemic_tail(outbreak_data = preoutbreak_by_location_start, tail_period = tail_period)
     
     # get the row idx for epidemic start
