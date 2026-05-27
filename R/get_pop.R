@@ -51,7 +51,7 @@ estimate_adj_factors <- function(
   }
   
   # Adjust year if it exceeds the range
-  year <- if (year > 2020) 2020 else year
+  year <- if (year < 2015) 2015 else year
   
   # Validate year
   if (any(!(year %in% WPP2024$Time))) {
