@@ -72,29 +72,52 @@ make_run_id <- function(opt) {
   )
 }
 
-#' Stage 1 GeoParquet — raw sf object pulled from API (retains geometry).
+#' Stage 1 geo file — raw sf object pulled from API (retains geometry).
+#' Extension is .parquet (GeoParquet) when use_geoparquet is TRUE, else .geojson.
 make_stage1_geo_filename <- function(opt) {
-  file.path(
-    here(opt$output_dir),
-    paste0("stage1_geo_", make_run_id(opt), ".parquet")
-  )
+  ext <- if (isTRUE(opt$use_geoparquet)) ".parquet" else ".geojson"
+  file.path(here(opt$output_dir), paste0("stage1_geo_", make_run_id(opt), ext))
 }
 
-#' Stage 1 flat Parquet — normalized tabular data (geometry dropped).
+#' Stage 1 flat file — normalized tabular data (geometry dropped).
+#' Extension is .parquet when use_geoparquet is TRUE, else .rds.
 #' This is the input to Stage 2 outbreak detection.
 make_stage1_flat_filename <- function(opt) {
+  ext <- if (isTRUE(opt$use_geoparquet)) ".parquet" else ".rds"
+  file.path(here(opt$output_dir), paste0("stage1_flat_", make_run_id(opt), ext))
+}
+
+#' Stage 2 file — outbreak detection results for one country (all windows).
+#' Extension is .parquet when use_geoparquet is TRUE, else .rds.
+make_stage2_filename <- function(who_region, country_iso3, use_geoparquet = FALSE) {
+  ext <- if (isTRUE(use_geoparquet)) ".parquet" else ".rds"
   file.path(
-    here(opt$output_dir),
-    paste0("stage1_flat_", make_run_id(opt), ".parquet")
+    here("analysis/generated_data"),
+    paste0("stage2_", who_region, "_", country_iso3, ext)
   )
 }
 
-#' Stage 2 Parquet — outbreak detection results for one country (all windows).
-make_stage2_filename <- function(who_region, country_iso3) {
-  file.path(
-    here("analysis/generated_data"),
-    paste0("stage2_", who_region, "_", country_iso3, ".parquet")
-  )
+# ---------------------------------------------------------------------------
+# Format-aware I/O helpers
+# ---------------------------------------------------------------------------
+
+#' Write a flat data frame to .rds (default) or .parquet (use_geoparquet = TRUE).
+write_tabular <- function(df, path, use_geoparquet = FALSE) {
+  if (isTRUE(use_geoparquet)) arrow::write_parquet(df, path)
+  else saveRDS(df, path)
+}
+
+#' Read a flat data frame from .rds (default) or .parquet (use_geoparquet = TRUE).
+read_tabular <- function(path, use_geoparquet = FALSE) {
+  if (isTRUE(use_geoparquet)) arrow::read_parquet(path)
+  else readRDS(path)
+}
+
+#' Write a spatial sf object to .geojson (default) or .parquet (use_geoparquet = TRUE).
+#' delete_dsn = TRUE is required: sf::st_write refuses to overwrite by default.
+write_spatial <- function(sf_obj, path, use_geoparquet = FALSE) {
+  if (isTRUE(use_geoparquet)) sfarrow::st_write_parquet(sf_obj, path)
+  else sf::st_write(sf_obj, path, driver = "GeoJSON", delete_dsn = TRUE, quiet = TRUE)
 }
 
 # ---------------------------------------------------------------------------

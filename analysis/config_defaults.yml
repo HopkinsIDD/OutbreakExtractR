@@ -68,3 +68,8 @@ nonzero_windows: ~
 # --- Job metadata ---
 set_name: "default"
 output_dir: "analysis/generated_data"
+
+# --- Output format ---
+# Set to true to write spatial files as GeoParquet (requires sfarrow) and
+# tabular files as Parquet (requires arrow). Default false uses GeoJSON + RDS.
+use_geoparquet: false

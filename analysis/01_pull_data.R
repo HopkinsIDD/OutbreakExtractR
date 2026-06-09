@@ -85,15 +85,15 @@ if (is.null(raw_sf) || nrow(raw_sf) == 0) {
   warning("API returned no data for: ", location_str,
           "  [", opt$time_lower_bound, " → ", opt$time_upper_bound, "]")
   # Write empty sentinel files so Batch 2 can detect and skip gracefully
-  arrow::write_parquet(data.frame(), out_flat)
+  write_tabular(data.frame(), out_flat, opt$use_geoparquet)
   quit(status = 0)
 }
 
 message("Pulled ", nrow(raw_sf), " raw observations.")
 
 # Save raw sf with geometry as GeoParquet (useful for spatial visualisation)
-sfarrow::st_write_parquet(raw_sf, out_geo)
-message("Saved raw GeoParquet: ", basename(out_geo))
+write_spatial(raw_sf, out_geo, opt$use_geoparquet)
+message("Saved raw geo file: ", basename(out_geo))
 
 # ---------------------------------------------------------------------------
 # Stage 1b: normalize through the OutbreakExtractR pipeline
@@ -140,7 +140,7 @@ normalized <- weekly_data %>%
 # Save flat parquet for Batch 2
 # ---------------------------------------------------------------------------
 
-arrow::write_parquet(normalized, out_flat)
+write_tabular(normalized, out_flat, opt$use_geoparquet)
 
 message("Stage 1 complete.")
 message("  Rows:      ", nrow(normalized))

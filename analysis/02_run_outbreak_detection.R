@@ -20,7 +20,6 @@ library(dplyr)
 library(purrr)
 library(lubridate)
 library(stringr)
-library(arrow)
 
 source(here("analysis/utils.R"))
 
@@ -45,7 +44,8 @@ print_options(opt)
 # ---------------------------------------------------------------------------
 
 stage1_dir <- here("analysis/generated_data")
-pattern    <- paste0("^stage1_flat_", opt$who_region, "_", opt$country_iso3, "_.*\\.parquet$")
+stage1_ext <- if (isTRUE(opt$use_geoparquet)) "\\.parquet" else "\\.rds"
+pattern    <- paste0("^stage1_flat_", opt$who_region, "_", opt$country_iso3, "_.*", stage1_ext, "$")
 stage1_files <- list.files(stage1_dir, pattern = pattern, full.names = TRUE)
 
 if (length(stage1_files) == 0) {
@@ -62,7 +62,7 @@ message("Found ", length(stage1_files), " Stage 1 file(s) for ",
 # Skip if already done
 # ---------------------------------------------------------------------------
 
-out_file <- make_stage2_filename(opt$who_region, opt$country_iso3)
+out_file <- make_stage2_filename(opt$who_region, opt$country_iso3, opt$use_geoparquet)
 
 if (file.exists(out_file) && !isTRUE(opt$redo)) {
   message("Stage 2 output already exists, skipping: ", out_file)
@@ -87,11 +87,11 @@ results_list <- lapply(stage1_files, function(f) {
 
   tl <- lubridate::ymd(tl_str)
   tr <- lubridate::ymd(tr_str)
-  run_id <- str_remove(str_remove(fname, "^stage1_flat_"), "\\.parquet$")
+  run_id <- str_remove(str_remove(fname, "^stage1_flat_"), "\\.(parquet|rds)$")
 
   message("Processing: ", run_id)
 
-  normalized <- arrow::read_parquet(f)
+  normalized <- read_tabular(f, opt$use_geoparquet)
   if (nrow(normalized) == 0) {
     message("  Empty Stage 1 file — skipping.")
     return(NULL)
@@ -183,12 +183,12 @@ combined <- purrr::list_rbind(purrr::keep(results_list, \(x) !is.null(x)))
 if (nrow(combined) == 0) {
   warning("No outbreak results to save for: ",
           opt$who_region, "::", opt$country_iso3)
-  # Write empty parquet so post-processor can detect this gracefully
-  arrow::write_parquet(data.frame(), out_file)
+  # Write empty sentinel so post-processor can detect this gracefully
+  write_tabular(data.frame(), out_file, opt$use_geoparquet)
   quit(status = 0)
 }
 
-arrow::write_parquet(combined, out_file)
+write_tabular(combined, out_file, opt$use_geoparquet)
 
 message("\nStage 2 complete.")
 message("  Country:       ", opt$who_region, "::", opt$country_iso3)
