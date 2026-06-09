@@ -7,7 +7,6 @@ clean_psql_data <- function(
     original_data,...
 ){
 
-  library(tidyverse)
 
   # ---------------------------------------------------------------------------
   # Normalize taxdat API column names to OutbreakExtractR conventions.
