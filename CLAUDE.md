@@ -74,3 +74,68 @@ Functions suffixed `_obs` operate on observatory (observed) data; others operate
 ## Testing
 
 Test files live in `tests/testthat/` with CSV fixtures (`outbreak_testing_data.csv`, `clean_outbreak_testing_data.csv`). Tests use **testthat edition 3**. Coverage focuses on filtering boundaries, type coercion, NA handling, aggregation correctness, and de-duplication logic.
+
+---
+
+## HPC / SLURM Analysis Layer (`analysis/`)
+
+A config-driven pipeline that parallelizes over **countries × time windows** on Yggdrasil (University of Geneva HPC). Built on the same pattern as `mpox-uvira-sprint`.
+
+### Quick start
+
+```bash
+# 1. Generate YAML configs
+Rscript analysis/00_make_configs.R
+
+# 2. Set API credentials (these propagate to SLURM tasks via --export=ALL)
+export CHOLERA_API_USERNAME=<username>
+export CHOLERA_API_KEY=<api_key>
+
+# 3. Submit Batch 1 (data pull), chain Batch 2 (outbreak detection) after it
+BATCH1=$(sbatch --parsable analysis/bash/submit_01_pull_data.sh)
+sbatch --dependency=afterok:$BATCH1 analysis/bash/submit_02_detection.sh
+
+# 4. After all jobs finish, aggregate results locally
+Rscript analysis/03_aggregate_results.R
+```
+
+### Architecture
+
+**Two SLURM batches:**
+- **Batch 1** (`submit_01_pull_data.sh`): array over `analysis/configs/pull_set/` — one task per country × time window. Pulls via `taxdat::pull_taxonomy_data(source="api")`, runs the full normalization pipeline, writes:
+  - `stage1_geo_{run_id}.parquet` — GeoParquet with geometry (via `sfarrow`)
+  - `stage1_flat_{run_id}.parquet` — flat Parquet without geometry (input to Batch 2)
+- **Batch 2** (`submit_02_detection.sh`): array over `analysis/configs/detection_set/` — one task per country. Globs all Stage 1 flat files for that country, runs `identify_outbreaks()` + `trigger_alert()` per time window, writes `stage2_{region}_{iso3}.parquet`.
+
+### Config system
+
+- `analysis/config_defaults.yml` — full parameter schema with defaults
+- `analysis/00_make_configs.R` — editable country list and time windows; generates `pull_set/` and `detection_set/` configs
+- `analysis/utils.R` — shared helpers: `write_configs()`, `make_options_from_config()`, `make_taxdat_location()`, filename functions
+
+**taxdat location format:** `"CT-World::{WHO_REGION}::{ISO3}"` (e.g. `"CT-World::AFR::COD"`).  
+**Credentials:** always via env vars `CHOLERA_API_USERNAME` / `CHOLERA_API_KEY` — never in config files.
+
+### Local dry-run workflow
+
+```bash
+# Generate a 1-country test config
+# (already created by 00_make_configs.R as configs/test_pull/ and test_detection/)
+
+# Test Batch 1
+Rscript analysis/01_pull_data.R -c analysis/configs/test_pull/test_pull_1.yml
+
+# Test Batch 2
+Rscript analysis/02_run_outbreak_detection.R -c analysis/configs/test_detection/test_detection_1.yml
+
+# SLURM dry run (no submission)
+SLURM_ARRAY_TASK_ID=0 bash analysis/bash/submit_01_pull_data.sh
+```
+
+### SLURM array bounds
+
+After running `00_make_configs.R`, it prints the exact `--array` bounds to set in the submission scripts. **Edit the `#SBATCH --array=` lines** in `submit_01_pull_data.sh` and `submit_02_detection.sh` before submitting.
+
+### GeoParquet
+
+`get_shp()` now accepts an `output_parquet` parameter — when provided, it saves the returned sf object as GeoParquet via `sfarrow::st_write_parquet()`. All `analysis/` layer outputs use `.parquet` format (`sfarrow` for spatial, `arrow` for tabular).

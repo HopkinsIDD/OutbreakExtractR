@@ -1,0 +1,70 @@
+# config_defaults.yml
+# Default parameters for OutbreakExtractR HPC pipeline.
+# These values are loaded first; 00_make_configs.R overwrites only the fields
+# that vary across the country × time_window grid.
+#
+# CREDENTIALS: never stored here. Set as environment variables before running:
+#   export CHOLERA_API_USERNAME=<your_username>
+#   export CHOLERA_API_KEY=<your_api_key>
+
+# --- API endpoint ---
+api_website: "https://api.cholera-taxonomy.middle-distance.com/"
+
+# --- Geography (overridden per job) ---
+# who_region: WHO region prefix used in taxdat location strings
+# country_iso3: ISO3 country code (e.g. COD, NGA, ETH)
+# taxdat location format built as: "CT-World::{who_region}::{country_iso3}"
+who_region: "AFR"
+country_iso3: "COD"
+
+# Which spatial scales to retain after pulling
+spatial_scale_filter:
+  - "country"
+  - "admin1"
+  - "admin2"
+  - "admin3"
+
+# --- Time window (overridden per job in pull_set configs) ---
+time_lower_bound: "2010-01-01"
+time_upper_bound: "2015-12-31"
+
+# --- observation_filter() params ---
+temporal_scale_filter:
+  - "daily"
+  - "weekly"
+remove_na_sCh: true
+remove_na_cCh: false
+remove_na_locationperiod: false
+minimum_daily_cases: 0
+
+# --- identify_outbreaks() params ---
+# threshold_type options:
+#   "fixed threshold"
+#   "mean weekly incidence rate"
+#   "outbreak_dependent threshold"
+#   "time_restricted threshold"
+threshold_type: "mean weekly incidence rate"
+fixed_outbreak_threshold: ~       # only used when threshold_type == "fixed threshold"
+zero_case_assumption: true
+# outbreak_start_definition options: "consecutive" or "dual_window"
+outbreak_start_definition: "consecutive"
+min_weeks_above: 2
+require_increasing_trend: false
+tail_period: 6
+
+# --- dual_window params (ignored when outbreak_start_definition == "consecutive") ---
+window_weeks: 3
+use_cumulative_trigger: true
+# cumulative_trigger_type options:
+#   "cumulative_case_threshold"
+#   "cumulative_case_threshold_and_min_cases"
+#   "cumulative_case_threshold_and_nonzero_weeks"
+cumulative_trigger_type: "cumulative_case_threshold"
+cumulative_windows: 3
+cumulative_case_threshold_ratio: 1.5
+cumulative_min_cases: ~
+nonzero_windows: ~
+
+# --- Job metadata ---
+set_name: "default"
+output_dir: "analysis/generated_data"
