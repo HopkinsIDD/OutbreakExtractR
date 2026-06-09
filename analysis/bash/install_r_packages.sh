@@ -10,16 +10,15 @@
 #   - All DESCRIPTION Imports + analysis-layer Suggests (from CRAN)
 #   - taxdat (from GitHub: HopkinsIDD/cholera-taxonomy)
 #   - OutbreakExtractR itself (from the current directory)
-#
-# Before running, verify the libdeflate module name for your cluster:
-#   module spider libdeflate
-# Then set LIBDEFLATE_MODULE below to the version matching GCCcore-11.3.0.
+# 
+# !! This takes a while to complete
+
 
 set -euo pipefail
 
 
 # ---------------------------------------------------------------------------
-# Modules — toolchain must match R/4.2.1-foss-2022a (built with GCCcore-11.3.0)
+# Modules — toolchain
 # ---------------------------------------------------------------------------
 module purge
 module load GCCcore/12.3.0 GCC/12.3.0 libdeflate/1.18 Abseil/20230125.3 OpenMPI/4.1.5 R/4.3.2  GDAL/3.7.1 CMake
@@ -54,6 +53,9 @@ pkgs <- c(
   "yaml", "optparse", "here",
   "arrow", "sfarrow",
   "furrr", "future",
+  
+  # for taxdat
+  "ISOcodes", "readr", "reshape2",
 
   # dev / testing
   "testthat", "remotes"
@@ -71,8 +73,10 @@ if (length(missing_pkgs) > 0) {
 
 # ---- taxdat (private GitHub package) ---------------------------------------
 if (!"taxdat" %in% rownames(installed.packages())) {
+# NOTE: Needed to rebuild the documentation rm -rf man/ NAMESPACE && Rscript -e "devtools::document()"
   message("Installing taxdat from GitHub (HopkinsIDD/cholera-taxonomy) ...")
-  remotes::install_github("HopkinsIDD/cholera-taxonomy", upgrade = "never")
+  remotes::install_version("Matrix", version = "1.6-5", repos = "https://cran.r-project.org")
+  remotes::install_github("HopkinsIDD/cholera-taxonomy/packages/taxdat", upgrade = "never")
 } else {
   message("taxdat already installed.")
 }
