@@ -40,7 +40,7 @@
 module load GCCcore/12.3.0 GCC/12.3.0 libdeflate/1.18 Abseil/20230125.3 OpenMPI/4.1.5 R/4.3.2  GDAL/3.7.1
 
 # Set taxonomy credentials
-bash analysis/bash/set_taxonomy_api_keys.sh
+source analysis/bash/set_taxonomy_api_keys.sh
 
 echo "===== Batch 1 start: $(date) ====="
 echo "SLURM_JOB_ID:        $SLURM_JOB_ID"
