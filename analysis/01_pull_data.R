@@ -20,7 +20,7 @@ library(optparse)
 library(dplyr)
 library(lubridate)
 library(sf)
-
+sf_use_s2(FALSE)
 source(here("analysis/utils.R"))
 
 # ---------------------------------------------------------------------------
