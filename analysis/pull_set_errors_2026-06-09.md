@@ -70,6 +70,10 @@ Affected: 41, 277, 296
 
 ### 6. `[readValues] cannot read values` — 2 jobs (1% of failures)
 
-Corrupted WorldPop raster during `exactextractr::exact_extract()`. Delete the cached raster and requeue.
+Two distinct root causes, both handled in `R/get_pop.R` / `R/add_population.R`.
+
+**Job 24 (NGA):** Corrupted WorldPop download. Both R2024B and R2025A use identical LZW+PREDICTOR=2 compression (standard, readable by all GDAL versions). The "Using code not yet in table" / `TIFFReadEncodedTile` errors are produced by a truncated LZW stream — i.e., a partial download of the 150 MB NGA raster. Fix: `download_worldpop_constrained()` now reads one tile after download to verify the file is intact; if corrupt, it deletes the cached file and retries with the next release (R2024B). On a clean re-run the R2025A download will succeed and no fallback is needed.
+
+**Job 53 (ZMB):** Single-observation LP had a POINT geometry (centroid coordinates only). `exactextractr::exact_extract()` only supports polygon geometries (`st_dimension == 2`). Fix: non-polygon geometries are now filtered out alongside empty geometries in `add_population()`, with pop set to NA.
 
 Affected: 24, 53

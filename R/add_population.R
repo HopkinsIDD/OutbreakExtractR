@@ -85,6 +85,15 @@ add_population <- function(normalized_data, raw_sf, country_iso3,
       .groups = "drop"
     )
 
+  # All location_period_ids are NA (absent from API response or filtered out).
+  # purrr::list_rbind() on an empty map returns a 0-column tibble, which breaks
+  # the left_join below. Return early with pop = NA for all rows.
+  if (nrow(lp_years) == 0) {
+    message("add_population(): no valid location_period_ids — pop set to NA for all rows.")
+    normalized_data$pop <- NA_real_
+    return(normalized_data)
+  }
+
   # ---------------------------------------------------------------------------
   # 3. Country boundary for the UN adjustment factor (fetched once)
   # ---------------------------------------------------------------------------
@@ -189,17 +198,20 @@ add_population <- function(normalized_data, raw_sf, country_iso3,
         sf::st_crs(valid_sfc) <- if (!is.na(source_crs)) source_crs else 4326
         valid_sfc <- sf::st_transform(valid_sfc, 4326)
 
-        # Guard: empty geometries (API returns GEOMETRYCOLLECTION EMPTY when a
-        # location has no spatial data) cause sf::st_dimension() to return NA,
-        # which makes exactextractr's internal if(!all(st_dimension(y)==2))
-        # throw "missing value where TRUE/FALSE needed".
-        empty <- sf::st_is_empty(valid_sfc)
-        if (any(empty)) {
-          message("    Empty geometry for LP(s): ",
-                  paste(lp_ids[valid_idx[empty]], collapse = ", "),
+        # exact_extract requires 2-D polygon geometries.
+        # st_dimension() returns: NA for empty, 0 for point, 1 for line, 2 for polygon.
+        # A single pass covers both the "GEOMETRYCOLLECTION EMPTY" case (NA) and
+        # the centroid-only "POINT" case (0) that would otherwise cause
+        # exactextractr's internal if(!all(st_dimension(y)==2)) to throw
+        # "missing value where TRUE/FALSE needed".
+        dims     <- sf::st_dimension(valid_sfc)
+        bad_geom <- is.na(dims) | dims != 2L
+        if (any(bad_geom)) {
+          message("    Unusable geometry (empty/non-polygon) for LP(s): ",
+                  paste(lp_ids[valid_idx[bad_geom]], collapse = ", "),
                   " — pop = NA.")
-          valid_idx <- valid_idx[!empty]
-          valid_sfc <- valid_sfc[!empty]
+          valid_idx <- valid_idx[!bad_geom]
+          valid_sfc <- valid_sfc[!bad_geom]
         }
 
         if (length(valid_idx) > 0L) {

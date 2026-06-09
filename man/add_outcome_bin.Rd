@@ -6,11 +6,6 @@
 \usage{
 add_outcome_bin(basedf, bins)
 }
-\arguments{
-\item{basedf}{}
-
-\item{bins}{}
-}
 \value{
 dataframe
 }

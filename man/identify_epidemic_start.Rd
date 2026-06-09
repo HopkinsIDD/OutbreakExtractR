@@ -6,7 +6,18 @@
 \usage{
 identify_epidemic_start(
   outbreak_data = outbreak_data,
-  minimum_consecutive_reports = 3
+  outbreak_start_definition = c("consecutive", "dual_window"),
+  min_weeks_above = 2,
+  require_increasing_trend = FALSE,
+  window_weeks = 3,
+  use_cumulative_trigger = TRUE,
+  cumulative_trigger_type = c("cumulative_case_threshold",
+    "cumulative_case_threshold_and_min_cases",
+    "cumulative_case_threshold_and_nonzero_weeks"),
+  cumulative_windows = 3,
+  cumulative_case_threshold_ratio = 1.5,
+  cumulative_min_cases = NULL,
+  nonzero_windows = NULL
 )
 }
 \description{

@@ -9,7 +9,18 @@ identify_outbreaks(
   original_data,
   zero_case_assumption = T,
   customized_TL = NULL,
-  customized_TR = NULL
+  customized_TR = NULL,
+  outbreak_start_definition = c("consecutive", "dual_window"),
+  min_weeks_above = 2,
+  require_increasing_trend = FALSE,
+  window_weeks = window_weeks,
+  cumulative_windows = cumulative_windows,
+  cumulative_case_threshold_ratio = cumulative_case_threshold_ratio,
+  cumulative_trigger_type = cumulative_trigger_type,
+  use_cumulative_trigger = use_cumulative_trigger,
+  cumulative_min_cases = cumulative_min_cases,
+  nonzero_windows = nonzero_windows,
+  tail_period = 6
 )
 }
 \arguments{
