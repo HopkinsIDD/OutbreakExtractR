@@ -70,14 +70,19 @@ location_str <- make_taxdat_location(opt$who_region, opt$country_iso3)
 message("Pulling data: ", location_str,
         "  [", opt$time_lower_bound, " → ", opt$time_upper_bound, "]")
 
-raw_sf <- taxdat::pull_taxonomy_data(
-  username   = api_user,
-  password   = api_key,
-  locations  = location_str,
-  time_left  = opt$time_lower_bound,
-  time_right = opt$time_upper_bound,
-  source     = "api",
-  website    = opt$api_website
+# NOTE: The server certificate covers the base domain only, not the api.
+# subdomain — ssl_verifypeer is disabled for this call until the cert is fixed.
+raw_sf <- httr::with_config(
+  httr::config(ssl_verifypeer = FALSE),
+  taxdat::pull_taxonomy_data(
+    username   = api_user,
+    password   = api_key,
+    locations  = location_str,
+    time_left  = opt$time_lower_bound,
+    time_right = opt$time_upper_bound,
+    source     = "api",
+    website    = opt$api_website
+  )
 ) %>%
   taxdat::rename_database_fields(source = "api")
 
