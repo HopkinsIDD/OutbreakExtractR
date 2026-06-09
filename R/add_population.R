@@ -189,17 +189,32 @@ add_population <- function(normalized_data, raw_sf, country_iso3,
         sf::st_crs(valid_sfc) <- if (!is.na(source_crs)) source_crs else 4326
         valid_sfc <- sf::st_transform(valid_sfc, 4326)
 
-        raw_pops <- exactextractr::exact_extract(
-          pop_raster, valid_sfc, "sum"
-        )
-        pop_values[valid_idx] <- as.numeric(raw_pops) * adj_factor
+        # Guard: empty geometries (API returns GEOMETRYCOLLECTION EMPTY when a
+        # location has no spatial data) cause sf::st_dimension() to return NA,
+        # which makes exactextractr's internal if(!all(st_dimension(y)==2))
+        # throw "missing value where TRUE/FALSE needed".
+        empty <- sf::st_is_empty(valid_sfc)
+        if (any(empty)) {
+          message("    Empty geometry for LP(s): ",
+                  paste(lp_ids[valid_idx[empty]], collapse = ", "),
+                  " — pop = NA.")
+          valid_idx <- valid_idx[!empty]
+          valid_sfc <- valid_sfc[!empty]
+        }
+
+        if (length(valid_idx) > 0L) {
+          raw_pops <- exactextractr::exact_extract(
+            pop_raster, valid_sfc, "sum"
+          )
+          pop_values[valid_idx] <- as.numeric(raw_pops) * adj_factor
+        }
       }
 
       # -- e. Release raster from memory before moving to the next year -------
       rm(pop_raster)
       gc(verbose = FALSE)
 
-      dplyr::tibble(location_period_id = lp_ids, pop = pop_values)
+      dplyr::tibble(location_period_id = lp_ids, pop = pop_values, adj_factor)
     }) %>%
     purrr::list_rbind()
 

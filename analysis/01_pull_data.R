@@ -163,22 +163,28 @@ raw_sf <- raw_api %>%
     ))
   ) %>%
   dplyr::rename(
-    observation_collection_id = relationships.observation_collection.data.id,
-    TL                        = attributes.time_left,
-    TR                        = attributes.time_right,
-    sCh                       = attributes.fields.suspected_cases,
-    deaths                    = attributes.fields.deaths,
-    location_period_id        = attributes.location_period_id,
-    primary                   = attributes.primary,
-    location                  = attributes.location_name
+    TL      = attributes.time_left,
+    TR      = attributes.time_right,
+    primary = attributes.primary,
+    location = attributes.location_name
   )
 
-if ("attributes.fields.confirmed_cases" %in% colnames (raw_api)) {
-  raw_sf <- dplyr::rename(raw_sf,
-                   cCh = "attributes.fields.confirmed_cases")
-} else {
-  raw_sf <- raw_sf %>% 
-    dplyr::mutate(cCh = NA)
+# Optional columns: rename if present, else add as NA.
+# Mirrors the confirmed_cases guard below — some API responses omit these fields.
+optional_col_map <- list(
+  observation_collection_id = "relationships.observation_collection.data.id",
+  sCh                       = "attributes.fields.suspected_cases",
+  cCh                       = "attributes.fields.confirmed_cases",
+  deaths                    = "attributes.fields.deaths",
+  location_period_id        = "attributes.location_period_id"
+)
+for (new_name in names(optional_col_map)) {
+  old_name <- optional_col_map[[new_name]]
+  if (old_name %in% names(raw_sf)) {
+    raw_sf <- dplyr::rename(raw_sf, !!new_name := !!old_name)
+  } else {
+    raw_sf[[new_name]] <- NA
+  }
 }
 
 if (is.null(raw_sf) || nrow(raw_sf) == 0) {
