@@ -178,6 +178,7 @@ rename_database_fields <- function(database_df,
 #' @import methods dplyr
 library(methods)
 library(dplyr)
+library(rjson)
 ################################################################
 ######################Taxonomy Data Parser######################
 ################################################################
