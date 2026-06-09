@@ -77,7 +77,7 @@ raw_sf <- taxdat::pull_taxonomy_data(
   time_left  = opt$time_lower_bound,
   time_right = opt$time_upper_bound,
   source     = "api",
-  website    = "http://cholera-taxonomy.middle-distance.com/"
+  website    = opt$api_website
 ) %>%
   taxdat::rename_database_fields(source = "api")
 
