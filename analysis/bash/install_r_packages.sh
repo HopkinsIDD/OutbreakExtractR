@@ -47,6 +47,9 @@ pkgs <- c(
   "lubridate", "zoo", "tidyselect", "rlang", "magrittr",
   "slider", "curl", "raster", "exactextractr",
 
+  # population estimation (add_population / get_pop)
+  "rgeoboundaries",
+
   # analysis/ layer: configs, CLI, parquet I/O, parallelism
   "yaml", "optparse", "here",
   "arrow", "sfarrow",

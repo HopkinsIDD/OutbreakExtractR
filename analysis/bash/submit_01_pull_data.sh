@@ -37,7 +37,7 @@
 # The exact value is printed by 00_make_configs.R
 #SBATCH --array=0-35%25
 
-module load GCCcore/13.3.0 GCC/13.3.0 libdeflate/1.20 Abseil/20240722.0 OpenMPI/5.0.3 R/4.4.2
+module load GCCcore/12.3.0 GCC/12.3.0 libdeflate/1.18 Abseil/20230125.3 OpenMPI/4.1.5 R/4.3.2  GDAL/3.7.1
 
 # Set taxonomy credentials
 bash analysis/bash/set_taxonomy_api_keys.sh
