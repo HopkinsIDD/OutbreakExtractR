@@ -22,7 +22,7 @@ set -euo pipefail
 # Modules — toolchain must match R/4.2.1-foss-2022a (built with GCCcore-11.3.0)
 # ---------------------------------------------------------------------------
 module purge
-module load GCCcore/13.3.0 GCC/13.3.0 libdeflate/1.20 Abseil/20240722.0 OpenMPI/5.0.3 R/4.4.2
+module load GCCcore/12.3.0 GCC/12.3.0 libdeflate/1.18 Abseil/20230125.3 OpenMPI/4.1.5 R/4.3.2  GDAL/3.7.1 CMake
 
 echo "R:       $(Rscript --version 2>&1)"
 echo "Library: $(Rscript -e 'cat(.libPaths()[1])' 2>/dev/null)"
