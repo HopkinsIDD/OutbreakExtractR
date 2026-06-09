@@ -71,10 +71,11 @@ message("Pulling data: ", location_str,
         "  [", opt$time_lower_bound, " → ", opt$time_upper_bound, "]")
 
 # NOTE: The server certificate covers the base domain only, not the api.
-# subdomain — ssl_verifypeer is disabled for this call until the cert is fixed.
-# httr::with_config() has a promise-evaluation timing issue when the curl handle
-# is created inside a nested function; set_config/reset_config is reliable.
-httr::set_config(httr::config(ssl_verifypeer = FALSE))
+# subdomain — both ssl_verifypeer and ssl_verifyhost are disabled until the
+# cert is fixed. ssl_verifypeer controls CA trust; ssl_verifyhost (must be 0L,
+# not FALSE) controls the SAN/CN hostname match — this is the specific check
+# that fails here.
+httr::set_config(httr::config(ssl_verifypeer = 0L, ssl_verifyhost = 0L))
 raw_sf <- taxdat::pull_taxonomy_data(
   username   = api_user,
   password   = api_key,
