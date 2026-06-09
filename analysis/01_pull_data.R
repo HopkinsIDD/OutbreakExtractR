@@ -19,6 +19,7 @@ library(here)
 library(optparse)
 library(dplyr)
 library(lubridate)
+library(sf)
 
 source(here("analysis/utils.R"))
 
