@@ -70,7 +70,7 @@ time_windows <- tibble(
 
 # pull_set: country × time_window (for Batch 1 data pull)
 pull_specs <- tidyr::crossing(countries, time_windows) %>% 
-  arrange(time_lower_bound)
+  dplyr::arrange(time_lower_bound)
 # pull_specs <- tidyr::crossing(countries, time_windows, param_variants)
 write_configs(pull_specs, "pull_set")
 
