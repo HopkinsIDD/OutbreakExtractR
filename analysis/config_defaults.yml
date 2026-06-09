@@ -8,7 +8,7 @@
 #   export CHOLERA_API_KEY=<your_api_key>
 
 # --- API endpoint ---
-api_website: "https://api.cholera-taxonomy.middle-distance.com/"
+api_website: "https://cholera-taxonomy.middle-distance.com"
 
 # --- Geography (overridden per job) ---
 # who_region: WHO region prefix used in taxdat location strings

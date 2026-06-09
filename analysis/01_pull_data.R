@@ -66,15 +66,42 @@ if (is.na(api_user) || is.na(api_key)) {
 # Stage 1a: pull raw data from Cholera Taxonomy API
 # ---------------------------------------------------------------------------
 
+# Patch taxdat::flatten_json_result to handle list columns that contain nested
+# data frames or raw vectors — these cause jsonlite::flatten() to throw
+# "list columns are only allowed with raw vector contents". The fix drops any
+# such column before flattening; they carry no information used downstream.
+utils::assignInNamespace(
+  "flatten_json_result",
+  function(json_results) {
+    if (!is.data.frame(json_results)) json_results <- as.data.frame(json_results)
+    # Drop list columns whose elements are data frames or raw vectors —
+    # jsonlite::flatten() cannot handle them.
+    bad_col <- vapply(json_results, function(col) {
+      is.list(col) && any(vapply(col, function(x) is.data.frame(x) || is.raw(x), logical(1L)))
+    }, logical(1L))
+    json_results <- json_results[, !bad_col, drop = FALSE]
+    json_results <- jsonlite::flatten(json_results)
+    for (colname in names(json_results)) {
+      if (mode(json_results[[colname]]) == "list") {
+        if (max(sapply(json_results[[colname]], length)) == 1) {
+          json_results[[colname]] <- sapply(json_results[[colname]], function(x) {
+            ifelse(length(x) == 1, x, NA)
+          })
+        }
+      }
+    }
+    json_results
+  },
+  ns = "taxdat"
+)
+
 location_str <- make_taxdat_location(opt$who_region, opt$country_iso3)
 message("Pulling data: ", location_str,
         "  [", opt$time_lower_bound, " → ", opt$time_upper_bound, "]")
 
-# NOTE: The server certificate covers the base domain only, not the api.
-# subdomain — both ssl_verifypeer and ssl_verifyhost are disabled until the
-# cert is fixed. ssl_verifypeer controls CA trust; ssl_verifyhost (must be 0L,
-# not FALSE) controls the SAN/CN hostname match — this is the specific check
-# that fails here.
+# SSL note: ssl_verifyhost = 0L is kept as a safety net for environments
+# where the cert chain differs (e.g. HPC proxies). The correct base-domain
+# URL (no api. subdomain) is used per taxdat dev branch default.
 httr::set_config(httr::config(ssl_verifypeer = 0L, ssl_verifyhost = 0L))
 raw_sf <- taxdat::read_taxonomy_data_api(
   username   = api_user,
