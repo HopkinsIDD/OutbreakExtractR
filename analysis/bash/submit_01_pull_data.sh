@@ -35,7 +35,7 @@
 #SBATCH --partition=shared-cpu
 # EDIT: set upper bound to (N pull_set configs - 1)
 # The exact value is printed by 00_make_configs.R
-#SBATCH --array=0-314%25
+#SBATCH --array=0-3059%25
 
 module load GCCcore/12.3.0 GCC/12.3.0 libdeflate/1.18 Abseil/20230125.3 OpenMPI/4.1.5 R/4.3.2  GDAL/3.7.1 PostgreSQL/16.1
 
