@@ -79,7 +79,7 @@ raw_sf <- taxdat::pull_taxonomy_data(
   source     = "api",
   website    = opt$api_website
 ) %>%
-  taxdat::rename_database_fields(source = "api")
+  taxdat:::rename_database_fields(source = "api")
 
 if (is.null(raw_sf) || nrow(raw_sf) == 0) {
   warning("API returned no data for: ", location_str,
