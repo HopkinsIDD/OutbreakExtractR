@@ -65,6 +65,12 @@ cumulative_case_threshold_ratio: 1.5
 cumulative_min_cases: ~
 nonzero_windows: ~
 
+# --- Population estimation ---
+# Directory to cache WorldPop constrained rasters (100m, 2015-2030, per country/year).
+# Downloaded automatically by add_population() on first use; reused on subsequent runs.
+# Relative paths are resolved from the project root (here::here()).
+raster_dir: "analysis/worldpop"
+
 # --- Job metadata ---
 set_name: "default"
 output_dir: "analysis/generated_data"

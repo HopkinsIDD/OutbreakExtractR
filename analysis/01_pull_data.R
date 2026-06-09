@@ -136,6 +136,17 @@ normalized <- weekly_data %>%
   OutbreakExtractR::fill_phantom_zeroes() %>%
   OutbreakExtractR::fill_missing_lps()
 
+# Attach WorldPop population estimates (one value per location_period_id).
+# Required downstream by get_outbreak_threshold() and identify_epidemic_start()
+# for incidence-based threshold modes.
+# Rasters are downloaded once into opt$raster_dir and cached for subsequent runs.
+normalized <- OutbreakExtractR::add_population(
+  normalized_data = normalized,
+  raw_sf          = raw_sf,
+  country_iso3    = opt$country_iso3,
+  raster_dir      = here::here(opt$raster_dir)
+)
+
 # ---------------------------------------------------------------------------
 # Save flat parquet for Batch 2
 # ---------------------------------------------------------------------------
