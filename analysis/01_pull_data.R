@@ -167,12 +167,19 @@ raw_sf <- raw_api %>%
     TL                        = attributes.time_left,
     TR                        = attributes.time_right,
     sCh                       = attributes.fields.suspected_cases,
-    cCh                       = attributes.fields.confirmed_cases,
     deaths                    = attributes.fields.deaths,
     location_period_id        = attributes.location_period_id,
     primary                   = attributes.primary,
     location                  = attributes.location_name
   )
+
+if ("attributes.fields.confirmed_cases" %in% colnames (raw_api)) {
+  raw_sf <- dplyr::rename(raw_sf,
+                   cCh = "attributes.fields.confirmed_cases")
+} else {
+  raw_sf <- raw_sf %>% 
+    dplyr::mutate(cCh = NA)
+}
 
 if (is.null(raw_sf) || nrow(raw_sf) == 0) {
   warning("API returned no data for: ", location_str,
