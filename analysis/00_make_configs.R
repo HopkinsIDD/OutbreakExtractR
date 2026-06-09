@@ -28,24 +28,31 @@ countries <- tibble::tribble(
   "AFR",       "MOZ",
   "AFR",       "ZMB",
   "EMR",       "SOM",
-  "EMR",       "SDN",
-  "EMR",       "YEM",
-  "AMR",       "HTI"
+  "EMR",       "SDN"
 )
 
 # ---------------------------------------------------------------------------
 # 2. Define time windows
 # ---------------------------------------------------------------------------
-# Each row is one analysis window. Windows may overlap — this is intentional
-# to allow comparison of outbreak detection across different time horizons.
+# Each row is one pull window. Each window is a given month to make data download manageable.
 
-time_windows <- tibble::tribble(
-  ~time_lower_bound,  ~time_upper_bound,
-  "2010-01-01",       "2015-12-31",
-  "2013-01-01",       "2018-12-31",
-  "2016-01-01",       "2021-12-31",
-  "2018-01-01",       "2023-12-31"
+# time_windows <- tibble::tribble(
+#   ~time_lower_bound,  ~time_upper_bound,
+#   "2010-01-01",       "2015-12-31",
+#   "2013-01-01",       "2018-12-31",
+#   "2016-01-01",       "2021-12-31",
+#   "2018-01-01",       "2023-12-31"
+# )
+
+tstart <- "2010-01-01"
+tend <- "2024-12-31"
+tseq <- seq.Date(tstart, tend, by = "4 months")
+
+time_windows <- tibble(
+  time_lower_bound = tseq + 1,
+  time_upper_bound = c(tseq[-1], tend)
 )
+
 
 # ---------------------------------------------------------------------------
 # 3. (Optional) outbreak-detection parameter variants
