@@ -44,8 +44,8 @@ countries <- tibble::tribble(
 #   "2018-01-01",       "2023-12-31"
 # )
 
-tstart <- "2010-01-01"
-tend <- "2024-12-31"
+tstart <- as.Date("2010-01-01")
+tend <- as.Date("2024-12-31")
 tseq <- seq.Date(tstart, tend, by = "4 months")
 
 time_windows <- tibble(
