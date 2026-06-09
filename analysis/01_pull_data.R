@@ -76,13 +76,12 @@ message("Pulling data: ", location_str,
 # not FALSE) controls the SAN/CN hostname match — this is the specific check
 # that fails here.
 httr::set_config(httr::config(ssl_verifypeer = 0L, ssl_verifyhost = 0L))
-raw_sf <- taxdat::pull_taxonomy_data(
+raw_sf <- taxdat::read_taxonomy_data_api(
   username   = api_user,
-  password   = api_key,
+  api_key    = api_key,
   locations  = location_str,
-  time_left  = opt$time_lower_bound,
-  time_right = opt$time_upper_bound,
-  source     = "api",
+  time_left  = as.character(opt$time_lower_bound),
+  time_right = as.character(opt$time_upper_bound),
   website    = opt$api_website
 ) %>%
   taxdat::rename_database_fields(source = "api")
