@@ -25,6 +25,9 @@
 
 module load GCCcore/14.3.0 Abseil/20250512.1 OpenMPI/4.1.4 R/4.2.1
 
+# Set taxonomy credentials
+bash analysis/bash/set_taxonomy_api_keys.sh
+
 
 echo "===== Batch 2 start: $(date) ====="
 echo "SLURM_JOB_ID:        $SLURM_JOB_ID"
