@@ -37,6 +37,8 @@
 # The exact value is printed by 00_make_configs.R
 #SBATCH --array=0-35%25
 
+module load GCC/11.3.0 OpenMPI/4.1.4 R/4.2.1
+
 echo "===== Batch 1 start: $(date) ====="
 echo "SLURM_JOB_ID:        $SLURM_JOB_ID"
 echo "SLURM_ARRAY_TASK_ID: $SLURM_ARRAY_TASK_ID"
