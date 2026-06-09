@@ -179,6 +179,10 @@ rename_database_fields <- function(database_df,
 library(methods)
 library(dplyr)
 library(jsonlite)
+library(httr)
+library(lubridate)
+library(stringr)
+
 ################################################################
 ######################Taxonomy Data Parser######################
 ################################################################
