@@ -85,7 +85,7 @@ cat("Total Batch 2 jobs:", nrow(countries),  "\n")
 # ---------------------------------------------------------------------------
 test_specs <- tibble::tribble(
   ~who_region, ~country_iso3, ~time_lower_bound, ~time_upper_bound,
-  "AFR",       "ETH",         "2020-01-01",      "2020-02-31"
+  "AFR",       "ETH",         "2020-01-01",      "2020-03-01"
 )
 write_configs(test_specs, "test_pull")
 write_configs(dplyr::select(test_specs, who_region, country_iso3), "test_detection")

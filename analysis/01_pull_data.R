@@ -42,8 +42,12 @@ print_options(opt)
 # Skip if already done
 # ---------------------------------------------------------------------------
 
-out_geo  <- make_stage1_geo_filename(opt)
-out_flat <- make_stage1_flat_filename(opt)
+out_geo      <- make_stage1_geo_filename(opt)
+out_flat     <- make_stage1_flat_filename(opt)
+out_api_cache <- file.path(
+  here(opt$output_dir),
+  paste0("raw_api_cache_", make_run_id(opt), ".rds")
+)
 dir.create(dirname(out_flat), recursive = TRUE, showWarnings = FALSE)
 
 if (file.exists(out_flat) && !isTRUE(opt$redo)) {
@@ -52,13 +56,13 @@ if (file.exists(out_flat) && !isTRUE(opt$redo)) {
 }
 
 # ---------------------------------------------------------------------------
-# Credentials
+# Credentials — only required when no API cache exists
 # ---------------------------------------------------------------------------
 
 api_user <- Sys.getenv("CHOLERA_API_USERNAME", unset = NA_character_)
 api_key  <- Sys.getenv("CHOLERA_API_KEY",      unset = NA_character_)
 
-if (is.na(api_user) || is.na(api_key)) {
+if (!file.exists(out_api_cache) && (is.na(api_user) || is.na(api_key))) {
   stop("CHOLERA_API_USERNAME and CHOLERA_API_KEY environment variables must be set.")
 }
 
@@ -74,13 +78,33 @@ utils::assignInNamespace(
   "flatten_json_result",
   function(json_results) {
     if (!is.data.frame(json_results)) json_results <- as.data.frame(json_results)
-    # Drop list columns whose elements are data frames or raw vectors —
-    # jsonlite::flatten() cannot handle them.
-    bad_col <- vapply(json_results, function(col) {
-      is.list(col) && any(vapply(col, function(x) is.data.frame(x) || is.raw(x), logical(1L)))
-    }, logical(1L))
-    json_results <- json_results[, !bad_col, drop = FALSE]
+
+    # jsonlite::flatten() fails when nested data frames contain raw-vector
+    # list columns ("list columns are only allowed with raw vector contents").
+    # Fix: walk every list-of-data-frame column recursively and strip only the
+    # raw-vector leaf columns — do NOT remove the parent data frame columns,
+    # because jsonlite::flatten() needs them to produce the attributes.* names.
+    clean_df <- function(df) {
+      for (col in names(df)) {
+        v <- df[[col]]
+        if (is.data.frame(v)) {
+          # Nested data frame column: recurse directly — do NOT lapply over it,
+          # which would iterate columns (not rows) and produce wrong-length output.
+          df[[col]] <- clean_df(v)
+        } else if (is.list(v)) {
+          # Pure list column: remove if any element is a raw vector
+          if (any(vapply(v, is.raw, logical(1L)))) {
+            message("  [flatten_json_result patch] removing raw-vector column: ", col)
+            df[[col]] <- NULL
+          }
+        }
+      }
+      df
+    }
+
+    json_results <- clean_df(json_results)
     json_results <- jsonlite::flatten(json_results)
+
     for (colname in names(json_results)) {
       if (mode(json_results[[colname]]) == "list") {
         if (max(sapply(json_results[[colname]], length)) == 1) {
@@ -96,23 +120,58 @@ utils::assignInNamespace(
 )
 
 location_str <- make_taxdat_location(opt$who_region, opt$country_iso3)
-message("Pulling data: ", location_str,
-        "  [", opt$time_lower_bound, " → ", opt$time_upper_bound, "]")
 
-# SSL note: ssl_verifyhost = 0L is kept as a safety net for environments
-# where the cert chain differs (e.g. HPC proxies). The correct base-domain
-# URL (no api. subdomain) is used per taxdat dev branch default.
-httr::set_config(httr::config(ssl_verifypeer = 0L, ssl_verifyhost = 0L))
-raw_sf <- taxdat::read_taxonomy_data_api(
-  username   = api_user,
-  api_key    = api_key,
-  locations  = location_str,
-  time_left  = as.character(opt$time_lower_bound),
-  time_right = as.character(opt$time_upper_bound),
-  website    = opt$api_website
-) %>%
-  taxdat::rename_database_fields(source = "api")
-httr::reset_config()
+# Pull raw data from API — use cache if available to skip the network call on
+# debug reruns.  Delete raw_api_cache_*.rds manually (or with --redo-api) to
+# force a fresh pull.
+if (file.exists(out_api_cache)) {
+  message("Loading cached API response: ", basename(out_api_cache))
+  raw_api <- readRDS(out_api_cache)
+} else {
+  message("Pulling data: ", location_str,
+          "  [", opt$time_lower_bound, " → ", opt$time_upper_bound, "]")
+  raw_api <- taxdat::read_taxonomy_data_api(
+    username   = api_user,
+    api_key    = api_key,
+    locations  = location_str,
+    time_left  = as.Date(opt$time_lower_bound),
+    time_right = as.Date(opt$time_upper_bound)
+  )
+  saveRDS(raw_api, out_api_cache)
+  message("Cached API response: ", basename(out_api_cache))
+}
+
+# Select and rename API columns to OutbreakExtractR conventions.
+# rename_database_fields() maps attributes.id → locationPeriod_id, but the
+# correct LP identifier in the API response is attributes.location_period_id.
+# Using direct column selection based on actual API response structure.
+# Selecting only needed columns also drops list columns with raw-vector elements
+# that would cause sf::st_write to fail.
+raw_sf <- raw_api %>%
+  dplyr::select(
+    dplyr::any_of(c(
+      "relationships.observation_collection.data.id",
+      "attributes.time_left",
+      "attributes.time_right",
+      "attributes.fields.suspected_cases",
+      "attributes.fields.confirmed_cases",
+      "attributes.fields.deaths",
+      "attributes.location_period_id",
+      "attributes.primary",
+      "attributes.location_name"
+    ))
+  ) %>%
+  dplyr::rename(
+    observation_collection_id = relationships.observation_collection.data.id,
+    TL                        = attributes.time_left,
+    TR                        = attributes.time_right,
+    sCh                       = attributes.fields.suspected_cases,
+    cCh                       = attributes.fields.confirmed_cases,
+    deaths                    = attributes.fields.deaths,
+    location_period_id        = attributes.location_period_id,
+    primary                   = attributes.primary,
+    location                  = attributes.location_name
+  )
 
 if (is.null(raw_sf) || nrow(raw_sf) == 0) {
   warning("API returned no data for: ", location_str,
@@ -175,7 +234,7 @@ normalized <- weekly_data %>%
 # Rasters are downloaded once into opt$raster_dir and cached for subsequent runs.
 normalized <- OutbreakExtractR::add_population(
   normalized_data = normalized,
-  raw_sf          = raw_sf,
+  raw_sf          = raw_sf,    # has location_period_id + geometry (sf select preserves geom)
   country_iso3    = opt$country_iso3,
   raster_dir      = here::here(opt$raster_dir)
 )

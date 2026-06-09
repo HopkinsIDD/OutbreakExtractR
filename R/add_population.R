@@ -96,11 +96,12 @@ add_population <- function(normalized_data, raw_sf, country_iso3,
       message("rgeoboundaries::gb_adm0() failed: ", conditionMessage(e),
               "\nFalling back to union of LP geometries as country boundary.")
       all_geoms <- Filter(Negate(is.null), as.list(geom_lookup))
+      all_geoms_sfc <- do.call(sf::st_sfc, all_geoms)
+      # Set CRS separately — passing crs inside the do.call list triggers
+      # c.sfc dispatch which tries to compute st_bbox on the crs object.
+      sf::st_crs(all_geoms_sfc) <- if (!is.na(source_crs)) source_crs else 4326
       sf::st_sf(
-        geometry = sf::st_union(
-          do.call(sf::st_sfc, c(all_geoms, list(crs = source_crs))) %>%
-            sf::st_transform(4326)
-        )
+        geometry = sf::st_union(sf::st_transform(all_geoms_sfc, 4326))
       )
     }
   )
@@ -184,10 +185,9 @@ add_population <- function(normalized_data, raw_sf, country_iso3,
         # -- d. Single vectorized exact_extract call for all LPs this year ----
         #    exactextractr processes multiple geometries in one C++ pass,
         #    reading each raster tile at most once.
-        valid_sfc <- do.call(
-          sf::st_sfc, c(geoms[valid_idx], list(crs = source_crs))
-        ) %>%
-          sf::st_transform(4326)
+        valid_sfc <- do.call(sf::st_sfc, geoms[valid_idx])
+        sf::st_crs(valid_sfc) <- if (!is.na(source_crs)) source_crs else 4326
+        valid_sfc <- sf::st_transform(valid_sfc, 4326)
 
         raw_pops <- exactextractr::exact_extract(
           pop_raster, valid_sfc, "sum"
