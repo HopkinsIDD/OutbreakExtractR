@@ -21,7 +21,7 @@ set -euo pipefail
 # Modules — toolchain
 # ---------------------------------------------------------------------------
 module purge
-module load GCCcore/12.3.0 GCC/12.3.0 libdeflate/1.18 Abseil/20230125.3 OpenMPI/4.1.5 R/4.3.2  GDAL/3.7.1 CMake
+module load GCCcore/12.3.0 GCC/12.3.0 libdeflate/1.18 Abseil/20230125.3 OpenMPI/4.1.5 R/4.3.2  GDAL/3.7.1 PostgreSQL/16.1
 
 echo "R:       $(Rscript --version 2>&1)"
 echo "Library: $(Rscript -e 'cat(.libPaths()[1])' 2>/dev/null)"
@@ -62,7 +62,7 @@ pkgs <- c(
   "readr", "reshape2",
 
   # dev / testing
-  "testthat", "remotes"
+  "testthat", "remotes", "geojsonsf"
 )
 
 missing_pkgs <- pkgs[!pkgs %in% rownames(installed.packages())]

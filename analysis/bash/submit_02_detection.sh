@@ -14,16 +14,17 @@
 #SBATCH --job-name=cholera_detect
 #SBATCH --output=logs/%x_%A_%a.log
 #SBATCH --error=logs/%x_%A_%a.log
-#SBATCH --mem=4G
+#SBATCH --mem=10G
 #SBATCH --cpus-per-task=1
 #SBATCH --time=01:00:00
 #SBATCH --export=ALL
 #SBATCH --partition=shared-cpu
 # EDIT: set upper bound to (N detection_set configs - 1)
 # The exact value is printed by 00_make_configs.R
-#SBATCH --array=0-8%10
+#SBATCH --array=0-314%20
 
-module load GCCcore/12.3.0 GCC/12.3.0 libdeflate/1.18 Abseil/20230125.3 OpenMPI/4.1.5 R/4.3.2  GDAL/3.7.1
+module load GCCcore/12.3.0 GCC/12.3.0 libdeflate/1.18 Abseil/20230125.3 OpenMPI/4.1.5 R/4.3.2  GDAL/3.7.1 PostgreSQL/16.1
+
 
 # Set taxonomy credentials
 source analysis/bash/set_taxonomy_api_key.sh
