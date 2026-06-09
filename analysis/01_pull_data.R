@@ -70,16 +70,16 @@ location_str <- make_taxdat_location(opt$who_region, opt$country_iso3)
 message("Pulling data: ", location_str,
         "  [", opt$time_lower_bound, " → ", opt$time_upper_bound, "]")
 
-raw_sf <- pull_taxonomy_data(
+raw_sf <- taxdat::pull_taxonomy_data(
   username   = api_user,
   password   = api_key,
   locations  = location_str,
   time_left  = opt$time_lower_bound,
   time_right = opt$time_upper_bound,
   source     = "api",
-  website    = opt$api_website
+  website    = "http://cholera-taxonomy.middle-distance.com/"
 ) %>%
-  rename_database_fields(source = "api")
+  taxdat::rename_database_fields(source = "api")
 
 if (is.null(raw_sf) || nrow(raw_sf) == 0) {
   warning("API returned no data for: ", location_str,

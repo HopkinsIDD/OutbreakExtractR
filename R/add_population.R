@@ -29,7 +29,8 @@
 #'   location_period_id and TL.
 #' @param raw_sf sf object: geometry-bearing data returned by
 #'   taxdat::pull_taxonomy_data() (before geometry is dropped). Must contain
-#'   a location_period_id or lctn_pr column and an sf geometry column.
+#'   a location_period_id, locationPeriod_id, or lctn_pr column and an sf
+#'   geometry column.
 #' @param country_iso3 character: ISO3 country code (e.g. "COD"). Used to
 #'   download the correct WorldPop raster and to fetch the country boundary
 #'   for the UN population adjustment factor.
@@ -46,14 +47,17 @@ add_population <- function(normalized_data, raw_sf, country_iso3,
   # ---------------------------------------------------------------------------
   # 1. Build named geometry lookup: LP ID (character) -> sfg object
   # ---------------------------------------------------------------------------
-  # taxdat::rename_database_fields() uses "location_period_id";
-  # get_shp() uses "lctn_pr". Accept either.
+  # taxdat::rename_database_fields(source="api") uses "locationPeriod_id" (camelCase);
+  # taxdat::rename_database_fields(source="psql") / after clean_psql_data() uses
+  # "location_period_id" (snake_case); get_shp() uses "lctn_pr". Accept all three.
   geom_id_col <- if ("location_period_id" %in% names(raw_sf)) {
     "location_period_id"
+  } else if ("locationPeriod_id" %in% names(raw_sf)) {
+    "locationPeriod_id"
   } else if ("lctn_pr" %in% names(raw_sf)) {
     "lctn_pr"
   } else {
-    stop("raw_sf must have a 'location_period_id' or 'lctn_pr' column.")
+    stop("raw_sf must have a 'location_period_id', 'locationPeriod_id', or 'lctn_pr' column.")
   }
 
   lp_geoms <- raw_sf %>%

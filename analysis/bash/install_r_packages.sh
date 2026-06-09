@@ -8,7 +8,7 @@
 #
 # What this installs:
 #   - All DESCRIPTION Imports + analysis-layer Suggests (from CRAN)
-#   - taxdat (from GitHub: HopkinsIDD/cholera-taxonomy)
+#   - taxdat (from GitHub: HopkinsIDD/cholera-mapping-pipeline, branch dev)
 #   - OutbreakExtractR itself (from the current directory)
 # 
 # !! This takes a while to complete
@@ -54,8 +54,12 @@ pkgs <- c(
   "arrow", "sfarrow",
   "furrr", "future",
   
-  # for taxdat
-  "ISOcodes", "readr", "reshape2",
+  # taxdat Depends + runtime deps used in pull_data_helpers.R
+  # (ISOcodes, igraph, geodata are in DESCRIPTION Depends;
+  #  geojsonsf, rjson, httr, jsonlite are called directly in pull_data_helpers.R)
+  "ISOcodes", "igraph", "geodata",
+  "geojsonsf", "rjson", "httr", "jsonlite",
+  "readr", "reshape2",
 
   # dev / testing
   "testthat", "remotes"
@@ -74,9 +78,12 @@ if (length(missing_pkgs) > 0) {
 # ---- taxdat (private GitHub package) ---------------------------------------
 if (!"taxdat" %in% rownames(installed.packages())) {
 # NOTE: Needed to rebuild the documentation rm -rf man/ NAMESPACE && Rscript -e "devtools::document()"
-  message("Installing taxdat from GitHub (HopkinsIDD/cholera-taxonomy) ...")
+  message("Installing taxdat from GitHub (HopkinsIDD/cholera-mapping-pipeline, branch dev) ...")
   remotes::install_version("Matrix", version = "1.6-5", repos = "https://cran.r-project.org")
-  remotes::install_github("HopkinsIDD/cholera-taxonomy/packages/taxdat", upgrade = "never")
+  remotes::install_github("HopkinsIDD/cholera-mapping-pipeline",
+                          subdir = "packages/taxdat",
+                          ref    = "dev",
+                          upgrade = "never")
 } else {
   message("taxdat already installed.")
 }
