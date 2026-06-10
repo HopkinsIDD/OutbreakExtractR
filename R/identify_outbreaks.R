@@ -91,8 +91,16 @@ identify_outbreaks <- function(
       if(last_epidemic_start$outbreak_number>0){
         final_outbreak_number = last_epidemic_start$outbreak_number
         after_last_epidemi_start = preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:nrow(preoutbreak_by_location_start_end_washout),]
-        last_outbreak_end_idx = min(as.numeric(after_last_epidemi_start[after_last_epidemi_start$epidemic_tail,]$row_idx))
-        preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:(last_outbreak_end_idx+2-1),]$outbreak_number = last_epidemic_start$outbreak_number
+        # Guard: if no epidemic_tail exists after the last start (outbreak extends
+        # to the end of the window), fall back to the last row index.
+        if(any(after_last_epidemi_start$epidemic_tail)){
+          last_outbreak_end_idx = min(as.numeric(after_last_epidemi_start[after_last_epidemi_start$epidemic_tail,]$row_idx))
+        } else {
+          last_outbreak_end_idx = nrow(preoutbreak_by_location_start_end_washout)
+        }
+        end_idx = min(as.numeric(last_outbreak_end_idx) + 2 - 1,
+                      nrow(preoutbreak_by_location_start_end_washout))
+        preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:end_idx,]$outbreak_number = last_epidemic_start$outbreak_number
       } else {
         #there's only one outbreak start (one potential outbreak)
         data_between_epidemic_start = preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:nrow(preoutbreak_by_location_start_end_washout),]

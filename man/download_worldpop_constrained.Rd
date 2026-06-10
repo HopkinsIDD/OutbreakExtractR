@@ -22,8 +22,10 @@ download_worldpop_constrained(
 }
 \description{
 Tries releases in order (newest first): R2025A → R2024B. After each
-download, reads one cell to verify the local GDAL build can decode the
-file. Older GDAL versions (e.g., 3.7.1 on some HPC clusters) cannot read
-the compression codec used by R2025A; R2024B uses an older codec that is
-broadly compatible.
+download, reads one cell to verify the file is intact. Both releases use
+standard LZW+PREDICTOR=2 compression readable by any GDAL version; the
+fallback exists to handle interrupted or corrupted downloads (a partial
+LZW stream produces "code not yet in table" / TIFFReadEncodedTile errors
+indistinguishable from a codec problem). If R2025A is corrupt, its cached
+file is deleted and R2024B is fetched fresh.
 }
