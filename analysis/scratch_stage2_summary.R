@@ -124,14 +124,17 @@ pa <- country_summary |>
 year_range <- range(combined$year, na.rm = TRUE)
 all_years  <- seq(year_range[1], year_range[2])
 
-# Country-level rows only: one row per (country, week) — cleanest proxy for
-# "is this country covered in this year?"
+# Use ALL spatial scales (non-phantom) so that countries whose early years
+# only have admin2/admin3 data (e.g. COD 2010-2013) are not falsely shown as
+# gaps. outbreak_weeks = distinct calendar weeks where ANY location was in
+# outbreak — n_distinct(TL) avoids double-counting a week covered by multiple
+# admin levels.
 country_yr <- combined |>
-  filter(spatial_scale == "country") |>
+  filter(!phantom) |>
   group_by(who_region, country_iso3, year) |>
   summarise(
     has_data       = TRUE,
-    outbreak_weeks = sum(in_outbreak, na.rm = TRUE),
+    outbreak_weeks = n_distinct(TL[in_outbreak]),
     .groups = "drop"
   )
 
@@ -163,6 +166,7 @@ pb <- year_grid |>
     name     = "log1p(outbreak-weeks)"
   ) +
   scale_x_continuous(breaks = seq(2010, 2024, 2)) +
+  facet_grid(who_region ~ ., scales = "free_y", space = "free_y") +
   labs(
     title    = "B  Outbreak activity over time",
     subtitle = "Yellow = data, no outbreak  |  Red = outbreak  |  Grey = data gap",
@@ -172,7 +176,8 @@ pb <- year_grid |>
   theme(
     axis.text.y      = element_text(size = 6),
     legend.position  = "bottom",
-    legend.key.width = unit(1.2, "cm")
+    legend.key.width = unit(1.2, "cm"),
+    strip.text.y     = element_text(face = "bold", angle = 0)
   )
 
 # ── 4. Panel C — Outbreak prevalence by spatial scale ────────────────────────

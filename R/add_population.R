@@ -146,7 +146,7 @@ add_population <- function(normalized_data, raw_sf, country_iso3,
 
       # -- a. Download / cache raster (no-op if already on disk) --------------
       raster_path <- tryCatch(
-        download_worldpop_constrained(country_iso3, yr, dest_dir = raster_dir),
+        download_worldpop_constrained(iso3_for_boundary, yr, dest_dir = raster_dir),
         error = function(e) {
           message("    Raster download failed: ", conditionMessage(e))
           NULL
@@ -171,7 +171,7 @@ add_population <- function(normalized_data, raw_sf, country_iso3,
         na.rm = TRUE
       )
       tot_UN <- WPP2024$PopTotal[
-        WPP2024$Time == yr & WPP2024$ISO3_code == country_iso3
+        WPP2024$Time == yr & WPP2024$ISO3_code == iso3_for_boundary
       ] * 1e3
 
       adj_factor <- if (length(tot_UN) == 1L && country_raw > 0) {
