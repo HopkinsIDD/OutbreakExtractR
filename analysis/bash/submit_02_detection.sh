@@ -64,7 +64,7 @@ THISCONFIG="$CONFIGDIR/${CONFIGNAMES[$SLURM_ARRAY_TASK_ID]}"
 echo "Config: $THISCONFIG"
 
 # --- Run Stage 2 ---
-$RSCRIPT analysis/02_run_outbreak_detection.R -c "$THISCONFIG" --redo FALSE || {
+$RSCRIPT analysis/02_run_outbreak_detection.R -c "$THISCONFIG" --redo TRUE || {
   echo "ERROR: 02_run_outbreak_detection.R failed for $THISCONFIG"
   exit 1
 }
