@@ -59,10 +59,10 @@ use_cumulative_trigger: true
 #   "cumulative_case_threshold"
 #   "cumulative_case_threshold_and_min_cases"
 #   "cumulative_case_threshold_and_nonzero_weeks"
-cumulative_trigger_type: "cumulative_case_threshold"
+cumulative_trigger_type: "cumulative_case_threshold_and_min_cases"
 cumulative_windows: 3
 cumulative_case_threshold_ratio: 1.5
-cumulative_min_cases: ~
+cumulative_min_cases: 50
 nonzero_windows: ~
 
 # --- Population estimation ---
