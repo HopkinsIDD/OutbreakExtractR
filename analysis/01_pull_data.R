@@ -142,6 +142,16 @@ if (file.exists(out_api_cache)) {
   message("Cached API response: ", basename(out_api_cache))
 }
 
+# Guard: empty API response means no observations for this location/window.
+# Must happen before select/rename — an empty sf has only a geometry column,
+# which would cause rename(TL = attributes.time_left) to crash.
+if (is.null(raw_api) || nrow(raw_api) == 0) {
+  warning("API returned no data for: ", location_str,
+          "  [", opt$time_lower_bound, " → ", opt$time_upper_bound, "]")
+  write_tabular(data.frame(), out_flat, opt$use_geoparquet)
+  quit(status = 0)
+}
+
 # Select and rename API columns to OutbreakExtractR conventions.
 # rename_database_fields() maps attributes.id → locationPeriod_id, but the
 # correct LP identifier in the API response is attributes.location_period_id.
@@ -185,14 +195,6 @@ for (new_name in names(optional_col_map)) {
   } else {
     raw_sf[[new_name]] <- NA
   }
-}
-
-if (is.null(raw_sf) || nrow(raw_sf) == 0) {
-  warning("API returned no data for: ", location_str,
-          "  [", opt$time_lower_bound, " → ", opt$time_upper_bound, "]")
-  # Write empty sentinel files so Batch 2 can detect and skip gracefully
-  write_tabular(data.frame(), out_flat, opt$use_geoparquet)
-  quit(status = 0)
 }
 
 message("Pulled ", nrow(raw_sf), " raw observations.")

@@ -64,7 +64,8 @@ add_population <- function(normalized_data, raw_sf, country_iso3,
     dplyr::rename(lp_id = !!geom_id_col) %>%
     dplyr::group_by(lp_id) %>%
     dplyr::slice(1) %>%
-    dplyr::ungroup()
+    dplyr::ungroup() %>%
+    sf::st_make_valid()
 
   # Named list: character(LP ID) -> sfg geometry
   geom_lookup <- setNames(
@@ -99,8 +100,11 @@ add_population <- function(normalized_data, raw_sf, country_iso3,
   # ---------------------------------------------------------------------------
   # Primary: rgeoboundaries network call.
   # Fallback: union of all LP geometries (approximation, avoids network dep).
+  # Strip any sub-national suffix (e.g. "TZA::Mainland" -> "TZA") so that
+  # gb_adm0() receives a plain ISO3 code it can resolve.
+  iso3_for_boundary <- regmatches(country_iso3, regexpr("[A-Z]{3}", country_iso3))
   country_shp <- tryCatch(
-    sf::st_transform(rgeoboundaries::gb_adm0(country = country_iso3), 4326),
+    sf::st_transform(rgeoboundaries::gb_adm0(country = iso3_for_boundary), 4326),
     error = function(e) {
       message("rgeoboundaries::gb_adm0() failed: ", conditionMessage(e),
               "\nFalling back to union of LP geometries as country boundary.")
