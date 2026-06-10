@@ -35,8 +35,8 @@ identify_outbreaks <- function(
     threshold_type = threshold_type,
     surveillance_data = original_data,
     zero_case_assumption = zero_case_assumption,
-    customized_TL,
-    customized_TR)
+    customized_TL = customized_TL,
+    customized_TR = customized_TR)
   
   # Create an empty list to store outbreaks
   outbreak_list <- vector(mode = 'list', length = length(unique(original_data_threshold$location)))
