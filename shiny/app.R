@@ -9,7 +9,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── 0. Check hard dependencies ────────────────────────────────────────────────
-needed  <- c("leaflet", "plotly", "bslib", "bsicons", "arrow")
+needed  <- c("leaflet", "plotly", "bslib", "bsicons")
 missing <- needed[!sapply(needed, requireNamespace, quietly = TRUE)]
 if (length(missing) > 0)
   stop(paste0("Missing packages — run:\n  install.packages(c(",
@@ -34,16 +34,14 @@ suppressPackageStartupMessages({
   library(forcats)
   library(rnaturalearth)
   library(sf)
-  library(arrow)
 })
 
 # ── 2. Load & pre-process data (runs once at startup) ─────────────────────────
-message("[ 1/4 ] Loading combined_outbreaks_cholera.parquet ...")
+message("[ 1/4 ] Loading combined_outbreaks_cholera.rds ...")
 
 # Paths are relative to the app directory so the app works both locally
 # (Shiny sets wd to the app dir) and on shinyapps.io.
-new_raw <- arrow::read_parquet("data/combined_outbreaks_cholera.parquet") %>%
-  as.data.frame() %>%
+new_raw <- readRDS("data/combined_outbreaks_cholera.rds") %>%
   mutate(
     TL   = as.Date(TL),
     TR   = as.Date(TR),
