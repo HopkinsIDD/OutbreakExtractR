@@ -113,7 +113,11 @@ parse_log <- function(path) {
   }
 
   # ── Outcome ───────────────────────────────────────────────────────────────────
-  completed  <- any(grepl("Batch 2 end:", lines, fixed = TRUE))
+  # "Batch 2 end:" is the shell wrapper sentinel — may be missing if the log was
+  # downloaded while the job was still writing or got truncated. Fall back to
+  # "Stage 2 complete." printed by the R script itself as a secondary signal.
+  completed  <- any(grepl("Batch 2 end:", lines, fixed = TRUE)) ||
+                any(grepl("Stage 2 complete.", lines, fixed = TRUE))
   no_results <- any(grepl("No outbreak results to save", lines, fixed = TRUE))
   skipped    <- any(grepl("Stage 2 output already exists, skipping", lines, fixed = TRUE))
   halted     <- any(grepl("Execution halted", lines, fixed = TRUE))
