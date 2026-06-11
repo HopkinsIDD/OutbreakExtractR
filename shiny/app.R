@@ -573,56 +573,99 @@ server <- function(input, output, session) {
                   outbreak_flag  = as.integer(any(outbreak_number > 0)),
                   .groups = "drop")
     } else {
+      # Aggregate to one row per TL (a location can have multiple rows from
+      # overlapping analysis runs; sum cases and flag as outbreak if any run
+      # detects one for that week).
       new_raw %>%
         filter(location == loc,
                year >= input$year_range[1],
                year <= input$year_range[2]) %>%
-        mutate(outbreak_flag = as.integer(outbreak_number > 0)) %>%
-        select(TL, sCh, deaths, outbreak_flag)
+        group_by(TL) %>%
+        summarise(sCh          = sum(sCh,    na.rm = TRUE),
+                  deaths       = sum(deaths, na.rm = TRUE),
+                  outbreak_flag = as.integer(any(outbreak_number > 0)),
+                  .groups = "drop")
     }
   })
 
   output$ts_plot <- renderPlotly({
-    empty_msg <- function(txt) {
-      ggplotly(
-        ggplot() +
-          annotate("text", x = 0.5, y = 0.5, label = txt, hjust = 0.5, vjust = 0.5,
-                   size = 3.5, colour = "grey60") +
-          theme_void()
-      ) %>% layout(margin = list(t = 5, b = 5))
+    # Empty-state placeholder (native plotly avoids the ggplotly date-axis issue)
+    empty_pl <- function(txt) {
+      plot_ly(type = "scatter", mode = "text") %>%
+        add_text(x = 0.5, y = 0.5, text = txt,
+                 textfont = list(size = 11, color = "#888")) %>%
+        layout(
+          xaxis = list(visible = FALSE, range = c(0, 1)),
+          yaxis = list(visible = FALSE, range = c(0, 1)),
+          margin = list(t = 5, b = 5)
+        )
     }
 
     ts <- ts_raw()
     if (is.null(ts) || nrow(ts) == 0)
-      return(empty_msg("Click a location on the map to see its weekly time series"))
+      return(empty_pl("Click a location on the map to see its weekly time series"))
 
-    # Outbreak shading bands: group consecutive outbreak weeks
     ts <- ts %>% arrange(TL) %>%
       mutate(grp = cumsum(c(1, diff(outbreak_flag) != 0)))
+
+    # xmax + 7 so a single-week outbreak has visible (non-zero) width
     bands <- ts %>%
       filter(outbreak_flag == 1) %>%
       group_by(grp) %>%
-      summarise(xmin = min(TL), xmax = max(TL), .groups = "drop")
+      summarise(xmin = min(TL), xmax = max(TL) + 7L, .groups = "drop")
 
-    p <- ggplot(ts, aes(x = TL, y = sCh)) +
-      geom_rect(
-        data        = bands,
-        aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
-        fill        = "#fc8d62", alpha = 0.25, inherit.aes = FALSE
-      ) +
-      geom_line(colour = "#2c7bb6", linewidth = 0.7, na.rm = TRUE) +
-      geom_point(size = 0.5, colour = "#2c7bb6", na.rm = TRUE) +
-      scale_y_continuous(labels = comma_format(),
-                         expand = expansion(mult = c(0, 0.08))) +
-      scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
-      labs(x = NULL, y = "Cases / week",
-           caption = "Orange bands = outbreak periods") +
-      theme_bw(base_size = 10) +
-      theme(axis.text.x  = element_text(angle = 45, hjust = 1),
-            plot.caption = element_text(size = 7, colour = "#888"))
+    # ── Native plot_ly (not ggplotly) so the x-axis is type "date" and shapes
+    # with ISO date strings land at the correct positions. ggplotly() converts
+    # date axes to type "linear" (numeric days since epoch), making date-string
+    # shape coordinates silently collapse to x = 0.
+    shapes <- lapply(seq_len(nrow(bands)), function(i) {
+      list(
+        type      = "rect",
+        fillcolor = "rgba(252,141,98,0.22)",
+        line      = list(width = 0),
+        xref      = "x",    yref = "paper",
+        x0        = format(bands$xmin[i], "%Y-%m-%d"),
+        x1        = format(bands$xmax[i], "%Y-%m-%d"),
+        y0        = 0,      y1   = 1,
+        layer     = "below"
+      )
+    })
 
-    ggplotly(p, tooltip = c("x", "y")) %>%
-      layout(showlegend = FALSE, margin = list(t = 10, b = 10, l = 50, r = 20))
+    plot_ly(
+      ts,
+      x    = ~TL,
+      y    = ~sCh,
+      type = "scatter",
+      mode = "lines+markers",
+      line   = list(color = "#2c7bb6", width = 1.5),
+      marker = list(color = "#2c7bb6", size = 3),
+      text  = ~paste0("<b>", format(TL, "%b %d %Y"), "</b><br>",
+                      scales::comma(sCh), " cases"),
+      hovertemplate = "%{text}<extra></extra>",
+      showlegend = FALSE
+    ) %>%
+      layout(
+        xaxis = list(
+          title      = "",
+          type       = "date",
+          range      = c("2010-01-01", "2024-12-31"),
+          tickformat = "%Y",
+          dtick      = "M12"
+        ),
+        yaxis = list(
+          title      = "Cases / week",
+          tickformat = ","
+        ),
+        shapes  = shapes,
+        margin  = list(t = 10, b = 40, l = 60, r = 20),
+        annotations = if (nrow(bands) > 0) list(list(
+          text      = "Shaded = outbreak periods",
+          xref = "paper", yref = "paper",
+          x = 1, y = 1.02, xanchor = "right", yanchor = "bottom",
+          showarrow = FALSE,
+          font = list(size = 9, color = "#888")
+        )) else list()
+      )
   })
 
   # ── Statistics table ────────────────────────────────────────────────────────
