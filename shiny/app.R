@@ -9,7 +9,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── 0. Check hard dependencies ────────────────────────────────────────────────
-needed  <- c("leaflet", "plotly", "bslib", "bsicons")
+needed  <- c("leaflet", "plotly", "bslib", "bsicons", "arrow")
 missing <- needed[!sapply(needed, requireNamespace, quietly = TRUE)]
 if (length(missing) > 0)
   stop(paste0("Missing packages — run:\n  install.packages(c(",
@@ -34,16 +34,16 @@ suppressPackageStartupMessages({
   library(forcats)
   library(rnaturalearth)
   library(sf)
-  library(here)
+  library(arrow)
 })
 
 # ── 2. Load & pre-process data (runs once at startup) ─────────────────────────
-message("[ 1/4 ] Loading combined_outbreaks_cholera.csv ...")
+message("[ 1/4 ] Loading combined_outbreaks_cholera.parquet ...")
 
-new_raw <- read.csv(
-  here("analysis/generated_data/combined_outbreaks_cholera.csv"),
-  stringsAsFactors = FALSE
-) %>%
+# Paths are relative to the app directory so the app works both locally
+# (Shiny sets wd to the app dir) and on shinyapps.io.
+new_raw <- arrow::read_parquet("data/combined_outbreaks_cholera.parquet") %>%
+  as.data.frame() %>%
   mutate(
     TL   = as.Date(TL),
     TR   = as.Date(TR),
@@ -136,7 +136,7 @@ message("[ 3/4 ] Loading spatial data ...")
 
 # Centroid lookup (built by data_prep.R)
 centroids <- tryCatch(
-  readRDS(here("shiny/data/centroids.rds")),
+  readRDS("data/centroids.rds"),
   error = function(e) {
     message("  [WARN] centroids.rds not found — run `Rscript shiny/data_prep.R` first. ",
             "Admin markers will be unavailable until then.")
