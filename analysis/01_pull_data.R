@@ -2,8 +2,8 @@
 #
 # Reads a YAML config, calls the Cholera Taxonomy API via taxdat, runs the
 # full OutbreakExtractR normalization pipeline, and writes two GeoParquet files:
-#   stage1_geo_{run_id}.parquet   — sf object (retains geometry, for spatial use)
-#   stage1_flat_{run_id}.parquet  — flat dataframe (no geometry, input to Batch 2)
+#   stage1_geo_{run_id}.{geojson,parquet}  — sf object (retains geometry, for spatial use)
+#   stage1_flat_{run_id}.{rds,parquet}     — cleaned observations, geometry dropped (input to Batch 2)
 #
 # Skips gracefully if outputs already exist (re-run with --redo TRUE to force).
 #
@@ -18,7 +18,6 @@
 library(here)
 library(optparse)
 library(dplyr)
-library(lubridate)
 library(sf)
 sf_use_s2(FALSE)
 source(here("analysis/utils.R"))
@@ -204,7 +203,11 @@ write_spatial(raw_sf, out_geo, opt$use_geoparquet)
 message("Saved raw geo file: ", basename(out_geo))
 
 # ---------------------------------------------------------------------------
-# Stage 1b: normalize through the OutbreakExtractR pipeline
+# Stage 1b: clean raw observations and save per-window flat file
+#
+# Filtering, aggregation, normalization, and population attachment all happen
+# in Batch 2 (02_run_outbreak_detection.R) once the full per-country series
+# has been assembled from all windows, matching the reference pipeline.
 # ---------------------------------------------------------------------------
 
 # Drop geometry — OutbreakExtractR functions operate on flat dataframes
@@ -213,55 +216,13 @@ raw_df <- sf::st_drop_geometry(raw_sf)
 # Clean: standardize types, identify spatial/temporal scale, clean location names
 clean_data <- OutbreakExtractR::clean_psql_data(raw_df)
 
-# Filter by time, scale, and case thresholds
-filtered_data <- OutbreakExtractR::observation_filter(
-  outbreak_data            = clean_data,
-  time_lower_bound_filter  = lubridate::ymd(opt$time_lower_bound),
-  time_upper_bound_filter  = lubridate::ymd(opt$time_upper_bound),
-  temporal_scale_filter    = opt$temporal_scale_filter,
-  who_regions              = opt$who_region,
-  spatial_scale_filter     = opt$spatial_scale_filter,
-  remove_na_sCh            = opt$remove_na_sCh,
-  remove_na_cCh            = opt$remove_na_cCh,
-  remove_na_locationperiod = opt$remove_na_locationperiod,
-  minimum_daily_cases      = opt$minimum_daily_cases
-)
-
-# Separate daily and weekly; aggregate daily → weekly
-daily_data  <- dplyr::filter(filtered_data, temporal_scale == "daily")
-weekly_data <- dplyr::filter(filtered_data, temporal_scale == "weekly")
-
-if (nrow(daily_data) > 0) {
-  aggregated_daily <- OutbreakExtractR::observation_aggregator(daily_data)
-  weekly_data <- dplyr::bind_rows(weekly_data, aggregated_daily)
-}
-
-# Normalize weekly data: deduplicate, align week-start day, fill zeros
-normalized <- weekly_data %>%
-  dplyr::ungroup() %>%
-  OutbreakExtractR::average_duplicate_observations() %>%
-  OutbreakExtractR::set_uniform_wday_start() %>%
-  OutbreakExtractR::fill_phantom_zeroes() %>%
-  OutbreakExtractR::fill_missing_lps()
-
-# Attach WorldPop population estimates (one value per location_period_id).
-# Required downstream by get_outbreak_threshold() and identify_epidemic_start()
-# for incidence-based threshold modes.
-# Rasters are downloaded once into opt$raster_dir and cached for subsequent runs.
-normalized <- OutbreakExtractR::add_population(
-  normalized_data = normalized,
-  raw_sf          = raw_sf,    # has location_period_id + geometry (sf select preserves geom)
-  country_iso3    = opt$country_iso3,
-  raster_dir      = here::here(opt$raster_dir)
-)
-
 # ---------------------------------------------------------------------------
-# Save flat parquet for Batch 2
+# Save cleaned flat file for Batch 2
 # ---------------------------------------------------------------------------
 
-write_tabular(normalized, out_flat, opt$use_geoparquet)
+write_tabular(clean_data, out_flat, opt$use_geoparquet)
 
 message("Stage 1 complete.")
-message("  Rows:      ", nrow(normalized))
-message("  Locations: ", length(unique(normalized$location)))
+message("  Rows:      ", nrow(clean_data))
+message("  Locations: ", length(unique(clean_data$location)))
 message("  Saved:     ", basename(out_flat))

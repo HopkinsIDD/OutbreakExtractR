@@ -1,14 +1,21 @@
 # 02_run_outbreak_detection.R  —  Batch 2: outbreak detection for one country
 #
-# Reads a per-country YAML config (detection_set), discovers all Stage 1 flat
-# parquet files for that country (across all time windows), and runs
-# identify_outbreaks() + trigger_alert() for each time window sequentially.
+# Reads a per-country YAML config (detection_set), concatenates all Stage 1
+# flat files for that country (one per 4-month pull window), and runs the
+# full reference processing pipeline + identify_outbreaks() + trigger_alert()
+# once over the entire per-country time series.
 #
-# Outputs one parquet file per country containing results across all windows:
-#   stage2_{who_region}_{country_iso3}.parquet
+# Processing pipeline matches Step2_Extract_outbreak.R from
+# GenevaIDD/global-cholera-surveillance-timeseries:
+#   filter (daily → aggregate; weekly) → fill_missing_lps ×3 →
+#   average_duplicate_observations → set_uniform_wday_start →
+#   filter(n_obs > 1) → fill_phantom_zeroes → add_population →
+#   identify_outbreaks (threshold over full series, no customized_TL/TR)
 #
-# This script is intentionally single-threaded — the per-country loop is fast
-# relative to data pull. SLURM parallelism happens at the country level.
+# Outputs one file per country:
+#   stage2_{who_region}_{country_iso3}.{rds,parquet}
+#
+# SLURM parallelism happens at the country level (one job per country).
 #
 # Usage:
 #   Rscript analysis/02_run_outbreak_detection.R \
@@ -20,6 +27,8 @@ library(dplyr)
 library(purrr)
 library(lubridate)
 library(stringr)
+library(sf)
+sf_use_s2(FALSE)
 
 source(here("analysis/utils.R"))
 
@@ -70,128 +79,239 @@ if (file.exists(out_file) && !isTRUE(opt$redo)) {
 }
 
 # ---------------------------------------------------------------------------
-# Run outbreak detection for each time window
+# Concatenate all per-window cleaned observations for this country
 # ---------------------------------------------------------------------------
 
-results_list <- lapply(stage1_files, function(f) {
-
-  # Parse time bounds from the filename (encoded as TL{YYYYMMDD}_TR{YYYYMMDD})
-  fname  <- basename(f)
-  tl_str <- str_extract(fname, "(?<=_TL)\\d{8}")
-  tr_str <- str_extract(fname, "(?<=_TR)\\d{8}")
-
-  if (is.na(tl_str) || is.na(tr_str)) {
-    warning("Could not parse time bounds from filename: ", fname, " — skipping.")
-    return(NULL)
-  }
-
-  tl <- lubridate::ymd(tl_str)
-  tr <- lubridate::ymd(tr_str)
-  run_id <- str_remove(str_remove(fname, "^stage1_flat_"), "\\.(parquet|rds)$")
-
-  message("Processing: ", run_id)
-
-  normalized <- read_tabular(f, opt$use_geoparquet)
-  if (nrow(normalized) == 0) {
-    message("  Empty Stage 1 file — skipping.")
-    return(NULL)
-  }
-
-  # --- identify_outbreaks() ---
-  outbreak_list <- tryCatch(
-    OutbreakExtractR::identify_outbreaks(
-      threshold_type                  = opt$threshold_type,
-      original_data                   = normalized,
-      zero_case_assumption            = opt$zero_case_assumption,
-      customized_TL                   = tl,
-      customized_TR                   = tr,
-      outbreak_start_definition       = opt$outbreak_start_definition,
-      min_weeks_above                 = opt$min_weeks_above,
-      require_increasing_trend        = opt$require_increasing_trend,
-      window_weeks                    = opt$window_weeks,
-      cumulative_windows              = opt$cumulative_windows,
-      cumulative_case_threshold_ratio = opt$cumulative_case_threshold_ratio,
-      cumulative_trigger_type         = opt$cumulative_trigger_type,
-      use_cumulative_trigger          = opt$use_cumulative_trigger,
-      cumulative_min_cases            = opt$cumulative_min_cases,
-      nonzero_windows                 = opt$nonzero_windows,
-      tail_period                     = opt$tail_period
-    ),
-    error = function(e) {
-      warning("identify_outbreaks() failed for ", run_id, ": ", conditionMessage(e))
-      NULL
-    }
-  )
-
-  if (is.null(outbreak_list)) return(NULL)
-
-  # Flatten list → dataframe (one row per location-week)
-  outbreaks_df <- purrr::list_rbind(
-    purrr::keep(outbreak_list, \(x) is.data.frame(x) && nrow(x) > 0)
-  )
-
-  if (nrow(outbreaks_df) == 0) {
-    message("  No outbreaks detected.")
-    return(NULL)
-  }
-
-  # --- trigger_alert() ---
-  alerts_df <- tryCatch(
-    OutbreakExtractR::trigger_alert(original_data = normalized),
-    error = function(e) {
-      warning("trigger_alert() failed for ", run_id, ": ", conditionMessage(e))
-      NULL
-    }
-  )
-
-  # Attach alert columns if available
-  if (!is.null(alerts_df) && nrow(alerts_df) > 0) {
-    alert_cols <- names(alerts_df)[str_detect(names(alerts_df), "^alert")]
-    join_keys  <- intersect(c("location", "TL", "TR"), names(alerts_df))
-    if (length(join_keys) > 0 && length(alert_cols) > 0) {
-      outbreaks_df <- dplyr::left_join(
-        outbreaks_df,
-        dplyr::select(alerts_df, dplyr::all_of(c(join_keys, alert_cols))),
-        by = join_keys
-      )
-    }
-  }
-
-  # Attach run metadata for later aggregation
-  outbreaks_df <- dplyr::mutate(
-    outbreaks_df,
-    who_region       = opt$who_region,
-    country_iso3     = opt$country_iso3,
-    time_lower_bound = as.character(tl),
-    time_upper_bound = as.character(tr),
-    run_id           = run_id
-  )
-
-  n_outbreak_rows <- sum(outbreaks_df$outbreak_number > 0, na.rm = TRUE)
-  message("  Rows: ", nrow(outbreaks_df),
-          "  |  Outbreak-period rows: ", n_outbreak_rows)
-
-  outbreaks_df
+clean_list <- lapply(stage1_files, function(f) {
+  tryCatch({
+    df <- read_tabular(f, opt$use_geoparquet)
+    if (nrow(df) == 0) return(NULL)
+    df
+  }, error = function(e) {
+    warning("Failed to read Stage 1 flat file: ", basename(f), " — ", conditionMessage(e))
+    NULL
+  })
 })
 
-# ---------------------------------------------------------------------------
-# Combine and save
-# ---------------------------------------------------------------------------
+clean_all <- purrr::list_rbind(purrr::keep(clean_list, \(x) !is.null(x)))
 
-combined <- purrr::list_rbind(purrr::keep(results_list, \(x) !is.null(x)))
-
-if (nrow(combined) == 0) {
-  warning("No outbreak results to save for: ",
-          opt$who_region, "::", opt$country_iso3)
-  # Write empty sentinel so post-processor can detect this gracefully
+if (nrow(clean_all) == 0) {
+  warning("No Stage 1 observations for: ", opt$who_region, "::", opt$country_iso3)
   write_tabular(data.frame(), out_file, opt$use_geoparquet)
   quit(status = 0)
 }
 
-write_tabular(combined, out_file, opt$use_geoparquet)
+message("Loaded ", nrow(clean_all), " cleaned observations across ",
+        length(stage1_files), " window(s).")
+
+# ---------------------------------------------------------------------------
+# Load per-window geo files → raw_sf for population attachment
+# ---------------------------------------------------------------------------
+
+geo_ext     <- if (isTRUE(opt$use_geoparquet)) "\\.parquet" else "\\.geojson"
+geo_pattern <- paste0("^stage1_geo_", opt$who_region, "_",
+                      gsub("::", "_", opt$country_iso3), "_.*", geo_ext, "$")
+geo_files   <- list.files(stage1_dir, pattern = geo_pattern, full.names = TRUE)
+
+if (length(geo_files) == 0) {
+  warning("No Stage 1 geo files found for population attachment — pop will be NA.")
+  raw_sf <- NULL
+} else {
+  geo_list <- lapply(geo_files, function(f) {
+    tryCatch(
+      if (isTRUE(opt$use_geoparquet)) sfarrow::st_read_parquet(f)
+      else sf::st_read(f, quiet = TRUE),
+      error = function(e) {
+        warning("Failed to read geo file: ", basename(f), " — ", conditionMessage(e))
+        NULL
+      }
+    )
+  })
+  raw_sf <- do.call(rbind, Filter(Negate(is.null), geo_list))
+  message("Loaded geometry from ", length(geo_files), " geo file(s).")
+}
+
+# ---------------------------------------------------------------------------
+# Derive full time range from window filenames
+# ---------------------------------------------------------------------------
+
+tl_strings <- str_extract(basename(stage1_files), "(?<=_TL)\\d{8}")
+tr_strings <- str_extract(basename(stage1_files), "(?<=_TR)\\d{8}")
+tl_all <- min(lubridate::ymd(tl_strings), na.rm = TRUE)
+tr_all <- max(lubridate::ymd(tr_strings), na.rm = TRUE)
+
+message("Full time range: ", tl_all, " → ", tr_all)
+
+# ---------------------------------------------------------------------------
+# Reference processing pipeline (matches Step2_Extract_outbreak.R:26-67)
+# ---------------------------------------------------------------------------
+
+# Daily branch: filter then aggregate to weekly
+daily_data <- OutbreakExtractR::observation_filter(
+  outbreak_data            = clean_all,
+  time_lower_bound_filter  = tl_all,
+  time_upper_bound_filter  = tr_all,
+  temporal_scale_filter    = "daily",
+  who_regions              = opt$who_region,
+  spatial_scale_filter     = opt$spatial_scale_filter,
+  remove_na_sCh            = opt$remove_na_sCh,
+  remove_na_cCh            = opt$remove_na_cCh,
+  remove_na_locationperiod = opt$remove_na_locationperiod,
+  minimum_daily_cases      = opt$minimum_daily_cases
+)
+if (nrow(daily_data) > 0) {
+  daily_data <- OutbreakExtractR::observation_aggregator(daily_data)
+}
+
+# Weekly branch: filter then coerce id columns to character (avoids bind_rows type conflicts)
+weekly_data <- OutbreakExtractR::observation_filter(
+  outbreak_data            = clean_all,
+  time_lower_bound_filter  = tl_all,
+  time_upper_bound_filter  = tr_all,
+  temporal_scale_filter    = "weekly",
+  who_regions              = opt$who_region,
+  spatial_scale_filter     = opt$spatial_scale_filter,
+  remove_na_sCh            = opt$remove_na_sCh,
+  remove_na_cCh            = opt$remove_na_cCh,
+  remove_na_locationperiod = opt$remove_na_locationperiod,
+  minimum_daily_cases      = opt$minimum_daily_cases
+) %>%
+  dplyr::mutate(
+    observation_collection_id = as.character(observation_collection_id),
+    dplyr::across(dplyr::any_of("original_location_name"), as.character)
+  )
+
+combined_filtered <- dplyr::bind_rows(weekly_data, daily_data)
+
+if (nrow(combined_filtered) == 0) {
+  warning("No observations after filtering for: ", opt$who_region, "::", opt$country_iso3)
+  write_tabular(data.frame(), out_file, opt$use_geoparquet)
+  quit(status = 0)
+}
+
+# Normalization: fill_missing_lps (×3), dedup, wday alignment, singleton drop, phantom zeros
+normalized <- combined_filtered %>%
+  OutbreakExtractR::fill_missing_lps() %>%
+  OutbreakExtractR::average_duplicate_observations() %>%
+  OutbreakExtractR::fill_missing_lps() %>%
+  OutbreakExtractR::set_uniform_wday_start() %>%
+  dplyr::group_by(location) %>%
+  dplyr::add_count(name = "n_obs") %>%
+  dplyr::ungroup() %>%
+  dplyr::filter(n_obs > 1) %>%
+  dplyr::select(-n_obs) %>%
+  OutbreakExtractR::fill_phantom_zeroes() %>%
+  OutbreakExtractR::fill_missing_lps()
+
+message("Normalized: ", nrow(normalized), " rows, ",
+        length(unique(normalized$location)), " location(s).")
+
+if (nrow(normalized) == 0) {
+  warning("No data after normalization for: ", opt$who_region, "::", opt$country_iso3)
+  write_tabular(data.frame(), out_file, opt$use_geoparquet)
+  quit(status = 0)
+}
+
+# Population attachment (WorldPop, keyed by location_period_id + geometry from geo files)
+if (!is.null(raw_sf)) {
+  normalized <- OutbreakExtractR::add_population(
+    normalized_data = normalized,
+    raw_sf          = raw_sf,
+    country_iso3    = opt$country_iso3,
+    raster_dir      = here::here(opt$raster_dir)
+  )
+} else {
+  normalized$pop <- NA_real_
+  message("Skipping add_population() — no geo files found; pop set to NA.")
+}
+
+# ---------------------------------------------------------------------------
+# Outbreak detection over full per-country series (no customized_TL/TR)
+# Threshold = mean weekly incidence over the entire time series, matching reference
+# ---------------------------------------------------------------------------
+
+outbreak_list <- tryCatch(
+  OutbreakExtractR::identify_outbreaks(
+    threshold_type                  = opt$threshold_type,
+    original_data                   = normalized,
+    zero_case_assumption            = opt$zero_case_assumption,
+    outbreak_start_definition       = opt$outbreak_start_definition,
+    min_weeks_above                 = opt$min_weeks_above,
+    require_increasing_trend        = opt$require_increasing_trend,
+    window_weeks                    = opt$window_weeks,
+    cumulative_windows              = opt$cumulative_windows,
+    cumulative_case_threshold_ratio = opt$cumulative_case_threshold_ratio,
+    cumulative_trigger_type         = opt$cumulative_trigger_type,
+    use_cumulative_trigger          = opt$use_cumulative_trigger,
+    cumulative_min_cases            = opt$cumulative_min_cases,
+    nonzero_windows                 = opt$nonzero_windows,
+    tail_period                     = opt$tail_period
+  ),
+  error = function(e) {
+    warning("identify_outbreaks() failed for ",
+            opt$who_region, "::", opt$country_iso3, ": ", conditionMessage(e))
+    NULL
+  }
+)
+
+if (is.null(outbreak_list)) {
+  write_tabular(data.frame(), out_file, opt$use_geoparquet)
+  quit(status = 0)
+}
+
+outbreaks_df <- purrr::list_rbind(
+  purrr::keep(outbreak_list, \(x) is.data.frame(x) && nrow(x) > 0)
+)
+
+if (nrow(outbreaks_df) == 0) {
+  message("No outbreaks detected for: ", opt$who_region, "::", opt$country_iso3)
+  write_tabular(data.frame(), out_file, opt$use_geoparquet)
+  quit(status = 0)
+}
+
+# ---------------------------------------------------------------------------
+# Alerts
+# ---------------------------------------------------------------------------
+
+alerts_df <- tryCatch(
+  OutbreakExtractR::trigger_alert(original_data = normalized),
+  error = function(e) {
+    warning("trigger_alert() failed: ", conditionMessage(e))
+    NULL
+  }
+)
+
+if (!is.null(alerts_df) && nrow(alerts_df) > 0) {
+  alert_cols <- names(alerts_df)[str_detect(names(alerts_df), "^alert")]
+  join_keys  <- intersect(c("location", "TL", "TR"), names(alerts_df))
+  if (length(join_keys) > 0 && length(alert_cols) > 0) {
+    outbreaks_df <- dplyr::left_join(
+      outbreaks_df,
+      dplyr::select(alerts_df, dplyr::all_of(c(join_keys, alert_cols))),
+      by = join_keys
+    )
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Add metadata and save
+# ---------------------------------------------------------------------------
+
+outbreaks_df <- dplyr::mutate(
+  outbreaks_df,
+  who_region       = opt$who_region,
+  country_iso3     = opt$country_iso3,
+  time_lower_bound = as.character(tl_all),
+  time_upper_bound = as.character(tr_all)
+)
+
+n_outbreak_rows <- sum(outbreaks_df$outbreak_number > 0, na.rm = TRUE)
+
+write_tabular(outbreaks_df, out_file, opt$use_geoparquet)
 
 message("\nStage 2 complete.")
-message("  Country:       ", opt$who_region, "::", opt$country_iso3)
-message("  Time windows:  ", length(stage1_files))
-message("  Total rows:    ", nrow(combined))
-message("  Saved:         ", basename(out_file))
+message("  Country:          ", opt$who_region, "::", opt$country_iso3)
+message("  Full time range:  ", tl_all, " → ", tr_all)
+message("  Total rows:       ", nrow(outbreaks_df))
+message("  Outbreak-period rows: ", n_outbreak_rows)
+message("  Saved:            ", basename(out_file))
