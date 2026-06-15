@@ -164,11 +164,22 @@ add_population <- function(normalized_data, raw_sf, country_iso3,
       # -- b. Adj factor: one exact_extract call on the country boundary ------
       #    Inlined from estimate_adj_factors() to reuse the already-loaded
       #    raster instead of having that function load it a second time.
-      country_raw <- sum(
-        exactextractr::exact_extract(
-          pop_raster, sf::st_geometry(country_shp), "sum"
+      #    Wrapped in tryCatch: the fallback country boundary (LP-geometry union,
+      #    used when rgeoboundaries is unavailable) can produce a geometry that
+      #    exactextractr cannot resolve ("Error getting geometry extent") — in
+      #    that case we fall through to adj_factor = 1.0.
+      country_raw <- tryCatch(
+        sum(
+          exactextractr::exact_extract(
+            pop_raster, sf::st_geometry(country_shp), "sum"
+          ),
+          na.rm = TRUE
         ),
-        na.rm = TRUE
+        error = function(e) {
+          message("    adj factor extraction failed: ", conditionMessage(e),
+                  " — using 1.0 (population will be unadjusted).")
+          0
+        }
       )
       tot_UN <- WPP2024$PopTotal[
         WPP2024$Time == yr & WPP2024$ISO3_code == iso3_for_boundary
@@ -216,6 +227,18 @@ add_population <- function(normalized_data, raw_sf, country_iso3,
                   " — pop = NA.")
           valid_idx <- valid_idx[!bad_geom]
           valid_sfc <- valid_sfc[!bad_geom]
+        }
+
+        # Normalize to a uniform geometry type.
+        # exactextractr::exact_extract() errors with "Mixed-type geometries not
+        # supported" when valid_sfc contains a mix of POLYGON and MULTIPOLYGON.
+        # After the bad_geom filter all remaining features have dimension == 2
+        # (polygon-type), so casting to MULTIPOLYGON is always safe.
+        if (length(valid_sfc) > 0L) {
+          geom_types <- unique(as.character(sf::st_geometry_type(valid_sfc)))
+          if (length(geom_types) > 1L || identical(geom_types, "POLYGON")) {
+            valid_sfc <- sf::st_cast(valid_sfc, "MULTIPOLYGON", warn = FALSE)
+          }
         }
 
         if (length(valid_idx) > 0L) {
