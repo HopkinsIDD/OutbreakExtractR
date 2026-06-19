@@ -245,7 +245,8 @@ outbreak_list <- tryCatch(
     use_cumulative_trigger          = opt$use_cumulative_trigger,
     cumulative_min_cases            = opt$cumulative_min_cases,
     nonzero_windows                 = opt$nonzero_windows,
-    tail_period                     = opt$tail_period
+    tail_period                     = opt$tail_period,
+    filter_outbreaks_by_size        = isTRUE(opt$filter_outbreaks_by_size)
   ),
   error = function(e) {
     warning("identify_outbreaks() failed for ",

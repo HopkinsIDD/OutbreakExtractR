@@ -50,8 +50,8 @@ clean_psql_data <- function(
       TL = lubridate::ymd(TL),
       TR = lubridate::ymd(TR),
       primary = dplyr::case_when(
-                  is.logical(primary) ~ primary,   # API source: already TRUE/FALSE
-                  primary == "f" ~ FALSE,           # psql source: "f"/"t" strings
+                  is.logical(primary) ~ as.logical(primary),  # API source: already TRUE/FALSE
+                  primary == "f" ~ FALSE,                      # psql source: "f"/"t" strings
                   primary == "t" ~ TRUE)
     ) %>% 
     dplyr::filter(primary) %>% ## always only keep primary data

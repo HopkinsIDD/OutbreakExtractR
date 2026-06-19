@@ -20,7 +20,8 @@ identify_outbreaks(
   use_cumulative_trigger = use_cumulative_trigger,
   cumulative_min_cases = cumulative_min_cases,
   nonzero_windows = nonzero_windows,
-  tail_period = 6
+  tail_period = 6,
+  filter_outbreaks_by_size = FALSE
 )
 }
 \arguments{
@@ -35,6 +36,10 @@ identify_outbreaks(
 \item{customized_TL:}{customize the lower bound of time for outbreak estimation}
 
 \item{customized_TR:}{customize the upper bound of time for outbreak estimation}
+
+\item{cumulative_min_cases:}{numeric: minimum cumulative cases. Used by the dual_window cumulative trigger and, when \code{filter_outbreaks_by_size = TRUE}, as the minimum total-case threshold for the post-detection size filter.}
+
+\item{filter_outbreaks_by_size:}{logical: when TRUE, drop detected outbreaks whose total cases (summed over the full outbreak window) fall below \code{cumulative_min_cases}. Default FALSE (no filtering, backward compatible).}
 }
 \value{
 list of dataframes

@@ -64,6 +64,8 @@ cumulative_windows: 3
 cumulative_case_threshold_ratio: 1.5
 cumulative_min_cases: 50
 nonzero_windows: ~
+# When true, drop detected outbreaks whose total cases < cumulative_min_cases
+filter_outbreaks_by_size: true
 
 # --- Population estimation ---
 # Directory to cache WorldPop constrained rasters (100m, 2015-2030, per country/year).
