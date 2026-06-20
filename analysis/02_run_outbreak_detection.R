@@ -109,8 +109,11 @@ message("Loaded ", nrow(clean_all), " cleaned observations across ",
 # ---------------------------------------------------------------------------
 
 geo_ext     <- if (isTRUE(opt$use_geoparquet)) "\\.parquet" else "\\.geojson"
+# Use opt$country_iso3 directly (with :: as-is) to match actual filenames.
+# gsub("::", "_", ...) was a bug: geo files retain :: in their names just like
+# stage1 flat files, so the underscore-substituted pattern never matched.
 geo_pattern <- paste0("^stage1_geo_", opt$who_region, "_",
-                      gsub("::", "_", opt$country_iso3), "_.*", geo_ext, "$")
+                      opt$country_iso3, "_.*", geo_ext, "$")
 geo_files   <- list.files(stage1_dir, pattern = geo_pattern, full.names = TRUE)
 
 if (length(geo_files) == 0) {
