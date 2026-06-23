@@ -119,6 +119,144 @@ utils::assignInNamespace(
   ns = "taxdat"
 )
 
+# Patch taxdat::read_taxonomy_data_api to guard against shape IDs that are
+# absent from the API response's `included` list.  match() returns NA/NULL when
+# the shape isn't found, and the subsequent [[NA]] index crashes with
+# "attempt to select less than one element in get1index" before the existing
+# is.null(unformatted_geojson) guard can fire.  The fix skips to the empty-
+# point fallback whenever this_shape_index is missing, mirroring what the
+# original null-check was already trying to do.
+utils::assignInNamespace(
+  "read_taxonomy_data_api",
+  function(username, api_key, locations = NULL, time_left = NULL,
+           time_right = NULL, uids = NULL,
+           website = "https://cholera-taxonomy.middle-distance.com/") {
+    api_type <- ""
+    if (is.null(uids)) {
+      api_type <- "by_location"
+      if (length(locations == 1)) {
+        locations <- c(locations, locations)
+      }
+      if (any(!grepl("::", locations))) {
+        stop("Trying to pull data for a continent is not allowed")
+      }
+      if ((sum(stringr::str_count(string = unique(locations), pattern = "::") == 1) > 2)) {
+        stop("Trying to pull data for more than 2 countries at a time is not allowed")
+      }
+      https_post_argument_list <- list(
+        email    = username, api_key = api_key,
+        locations = gsub("::", " ", locations),
+        time_left = time_left, time_right = time_right
+      )
+    } else if (is.null(locations) && is.null(time_left) && is.null(time_right)) {
+      api_type <- "by_observation_collections"
+      https_post_argument_list <- list(
+        email = username, api_key = api_key,
+        observation_collection_ids = uids
+      )
+    } else {
+      stop("Not supported")
+    }
+    website <- paste0(website, "/api/v1/observations/", api_type)
+    json    <- jsonlite::toJSON(https_post_argument_list, auto_unbox = T)
+    message("Fetching results from JSON API")
+    results <- httr::POST(website,
+                          httr::add_headers(`Content-Type` = "application/json"),
+                          body = json, encode = "form")
+    code <- httr::status_code(results)
+    if (code != 200) stop(paste("Error: Status Code", code))
+
+    original_results_data <- httr::content(results)
+    jsondata <- rjson::toJSON(original_results_data)
+    if (!jsonlite::validate(jsondata)) stop("Could not validate json response")
+    results_data <- jsonlite::fromJSON(jsondata)
+
+    if ((!("observations" %in% names(results_data))) |
+        (!("data" %in% names(results_data[["observations"]]))) |
+        (length(results_data[["observations"]]) > 1)) {
+      stop("Could not parse results properly.  Contact package maintainer")
+    }
+    results_data[["observations"]] <- taxdat:::flatten_json_result(results_data[["observations"]][["data"]])
+
+    observation_collections_present <- FALSE
+    if (("observation_collections" %in% names(results_data)) &&
+        ("data" %in% names(results_data[["observation_collections"]])) &&
+        (length(results_data[["observation_collections"]]) == 1)) {
+      results_data[["observation_collections"]] <- taxdat:::flatten_json_result(
+        results_data[["observation_collections"]][["data"]]
+      )
+      observation_collections_present <- TRUE
+    }
+
+    if (!length(unique(results_data$observations$id)) == nrow(results_data$observations)) {
+      stop("Could not parse results properly.  Contact package maintainer")
+    }
+
+    tmp_results   <- original_results_data[["location_periods"]][["data"]]
+    all_shape_ids <- sapply(original_results_data$location_periods$included, function(x) x$id)
+    all_locations <- list()
+
+    if (length(tmp_results) > 0) {
+      for (idx in 1:length(tmp_results)) {
+        message(paste(idx, "/", length(tmp_results)))
+        shape_id         <- tmp_results[[idx]][["relationships"]][["shape"]][["data"]][["id"]]
+        this_shape_index <- match(shape_id, all_shape_ids)
+        # PATCH: guard — match() returns NA/NULL when shape_id is absent from
+        # `included`; [[NA]] crashes before the is.null check below can fire.
+        if (is.null(this_shape_index) || length(this_shape_index) == 0 || is.na(this_shape_index)) {
+          message("  [read_taxonomy_data_api patch] shape ID not found in included, skipping geometry: ", shape_id)
+          all_locations[[idx]] <- sf::st_sf(geometry = sf::st_sfc(sf::st_point()))
+          next
+        }
+        unformatted_geojson <- original_results_data[["location_periods"]][["included"]][[this_shape_index]][["attributes"]][["simple_shape"]]
+        if (is.null(unformatted_geojson)) {
+          all_locations[[idx]] <- sf::st_sf(geometry = sf::st_sfc(sf::st_point()))
+          next
+        }
+        sf_geojson           <- geojsonsf::geojson_sf(unformatted_geojson)
+        all_locations[[idx]] <- sf_geojson
+      }
+    }
+
+    locations_sf <- taxdat::reduce_sf_vector(all_locations)
+    results_data$location_periods$data$geojson            <- NULL
+    results_data$location_periods$data$attributes$geojson <- NULL
+    results_data$location_periods <- taxdat:::flatten_json_result(results_data$location_periods$data)
+    if (nrow(results_data$location_periods) > 0) {
+      results_data$location_periods$sf_id <- seq_len(nrow(results_data$location_periods))
+    }
+
+    results_data$observations$attributes.location_period_id <- as(
+      results_data$observations$attributes.location_period_id,
+      class(results_data$location_periods$id)
+    )
+    all_results <- results_data$observations
+    if (observation_collections_present &&
+        (nrow(all_results) > 0) &&
+        (nrow(results_data$observation_collections) > 0)) {
+      all_results <- dplyr::left_join(
+        results_data$observations, results_data$observation_collections,
+        by = c(relationships.observation_collection.data.id = "id")
+      )
+    }
+    if ((nrow(all_results) > 0) && (nrow(results_data$location_periods) > 0)) {
+      all_results <- dplyr::left_join(
+        all_results, results_data$location_periods,
+        by = c(attributes.location_period_id = "id")
+      )
+    }
+
+    geoinput <- sf::st_sf(geometry = sf::st_sfc(sf::st_point(1 * c(NA, NA))))$geometry
+    if (nrow(all_results) == 0) geoinput <- geoinput[0]
+    all_results$geojson <- geoinput
+    all_results$geojson[!is.na(all_results$sf_id)] <-
+      locations_sf$geometry[all_results[!is.na(all_results$sf_id), ][["sf_id"]]]
+
+    return(sf::st_sf(all_results, sf_column_name = "geojson"))
+  },
+  ns = "taxdat"
+)
+
 location_str <- make_taxdat_location(opt$who_region, opt$country_iso3)
 
 # Pull raw data from API — use cache if available to skip the network call on
