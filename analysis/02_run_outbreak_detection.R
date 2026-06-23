@@ -115,6 +115,11 @@ geo_ext     <- if (isTRUE(opt$use_geoparquet)) "\\.parquet" else "\\.geojson"
 geo_pattern <- paste0("^stage1_geo_", opt$who_region, "_",
                       opt$country_iso3, "_.*", geo_ext, "$")
 geo_files   <- list.files(stage1_dir, pattern = geo_pattern, full.names = TRUE)
+# Exclude composite sidecars written by a prior run of this script — they have
+# a different schema (only location_period_id + area_per_1km2 + geometry) and
+# must not be rbind-ed with the full Stage 1 geo files.
+geo_files   <- geo_files[!grepl("_composite\\.geojson$|_composite\\.parquet$",
+                                basename(geo_files))]
 
 if (length(geo_files) == 0) {
   warning("No Stage 1 geo files found for population attachment — pop will be NA.")
@@ -229,6 +234,32 @@ if (!is.null(raw_sf)) {
 }
 
 # ---------------------------------------------------------------------------
+# Resolve composite locations (NA location_period_id, "|"-joined names) into
+# composite_loc_<ISO3>_* pseudo-LPs with summed child population and unioned
+# child geometry, so they survive detection (otherwise NA pop drops them).
+# ---------------------------------------------------------------------------
+
+composite_geom <- NULL
+if (!is.null(raw_sf)) {
+  comp <- tryCatch(
+    OutbreakExtractR::build_composite_locations(
+      normalized = normalized,
+      raw_sf     = raw_sf,
+      iso3       = opt$country_iso3
+    ),
+    error = function(e) {
+      warning("build_composite_locations() failed for ",
+              opt$who_region, "::", opt$country_iso3, ": ", conditionMessage(e))
+      NULL
+    }
+  )
+  if (!is.null(comp)) {
+    normalized     <- comp$data
+    composite_geom <- comp$geometry
+  }
+}
+
+# ---------------------------------------------------------------------------
 # Outbreak detection over full per-country series (no customized_TL/TR)
 # Threshold = mean weekly incidence over the entire time series, matching reference
 # ---------------------------------------------------------------------------
@@ -312,6 +343,34 @@ outbreaks_df <- dplyr::mutate(
 n_outbreak_rows <- sum(outbreaks_df$outbreak_number > 0, na.rm = TRUE)
 
 write_tabular(outbreaks_df, out_file, opt$use_geoparquet)
+
+# ---------------------------------------------------------------------------
+# Composite geometry sidecar
+#
+# The converter (00_ingest_outbreakextractr.R) builds outbreak_shapefiles.rds
+# by globbing stage1_geo_(AFR|EMR)_*.geojson and computing area itself. Composite
+# pseudo-LPs have no geometry in the per-window geo files, so emit a sidecar that
+# matches that glob, keyed by location_period_id = composite_loc_<ISO3>_*.
+# ---------------------------------------------------------------------------
+
+if (!is.null(composite_geom) && nrow(composite_geom) > 0) {
+  composite_geo_file <- file.path(
+    stage1_dir,
+    paste0("stage1_geo_", opt$who_region, "_", opt$country_iso3, "_composite.geojson")
+  )
+  tryCatch({
+    sf::st_write(
+      composite_geom %>% dplyr::rename(location_period_id = lctn_pr),
+      composite_geo_file,
+      delete_dsn = TRUE,
+      quiet      = TRUE
+    )
+    message("  Composite geometries: ", nrow(composite_geom),
+            " → ", basename(composite_geo_file))
+  }, error = function(e) {
+    warning("Failed to write composite geometry sidecar: ", conditionMessage(e))
+  })
+}
 
 message("\nStage 2 complete.")
 message("  Country:          ", opt$who_region, "::", opt$country_iso3)
