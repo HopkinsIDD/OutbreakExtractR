@@ -114,7 +114,7 @@ add_population <- function(normalized_data, raw_sf, country_iso3,
       # c.sfc dispatch which tries to compute st_bbox on the crs object.
       sf::st_crs(all_geoms_sfc) <- if (!is.na(source_crs)) source_crs else 4326
       sf::st_sf(
-        geometry = sf::st_union(sf::st_transform(all_geoms_sfc, 4326))
+        geometry = sf::st_union(sf::st_make_valid(sf::st_transform(all_geoms_sfc, 4326)))
       )
     }
   )
