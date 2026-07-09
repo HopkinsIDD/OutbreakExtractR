@@ -85,7 +85,7 @@ new_ob_admin <- new_raw %>%
   )) %>%
   filter(!is.na(scale)) %>%
   group_by(location, scale, country_iso3, who_region,
-           run_id, time_lower_bound, time_upper_bound, outbreak_number) %>%
+           time_lower_bound, time_upper_bound, outbreak_number) %>%
   summarise(
     ob_start     = min(TL),
     ob_end       = max(TR),
