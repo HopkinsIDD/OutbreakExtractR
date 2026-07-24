@@ -12,20 +12,33 @@
 # GenevaIDD/global-cholera-surveillance-timeseries Step2_Extract_outbreak.R:
 # de-composite the joined name into its child admin units, look up each child's
 # location_period_id and population from the atomic rows already present in the
-# normalized data, assign the composite a synthetic "composite_loc_<ISO3>_<n>"
+# normalized data (matching exactly, then on a name normalized to strip the
+# " Sanitary District" suffix the taxonomy appends to health-system units),
+# assign the composite a synthetic "composite_loc_<ISO3>_<n>"
 # id with summed child population, and build the composite geometry as the
 # union of its children's geometries. The rewritten rows then flow through
 # identify_outbreaks() like any ordinary location.
 #
+# Population (geometry-derived, matching the colleague's reference):
+# When a raster_dir is supplied, the composite's population is estimated
+# directly from the constrained WorldPop raster on its (child-union or
+# parent-fallback) geometry via estimate_pop_for_geometries(). This is the true
+# sub-area denominator the reference script computed with get_pop() on the
+# unioned shapefile, and it gives accurate incidence for composites whose
+# children resolve to real geometry. The summed-child pop and parent-polygon pop
+# are retained only as fallbacks (for composites whose geometry the raster could
+# not resolve). Without a raster_dir the older summed-child / parent pop is used.
+#
 # Fallback (parent-location approximation):
 # When composite children are not observed atomically (e.g. BDI sanitary
-# districts that only ever appear in aggregate), no matched-child pop or
-# geometry is available. In that case the function falls back to the parent
-# admin location (the prefix before the first "|" token) for both pop and
-# geometry. This is an approximation: the incidence denominator covers the full
-# parent area rather than just the composite subunits. Detection thresholds are
-# correspondingly lower (incidence underestimated), which may increase
-# sensitivity. This is documented for the caller's awareness.
+# districts that only ever appear in aggregate), no matched-child geometry is
+# available. In that case the function falls back to the parent admin location
+# (the prefix before the first "|" token) for geometry (and, without a
+# raster_dir, for pop). This is an approximation: the incidence denominator then
+# covers the full parent area rather than just the composite subunits, so
+# detection thresholds are correspondingly lower (incidence underestimated).
+# With a raster_dir, WorldPop-on-the-parent-geometry is still used, but it
+# remains a parent-area (over-estimated) denominator for these composites.
 
 # Internal: split composite names into one (composite_name, location) row per
 # child admin unit. Mirrors Step2_Extract_outbreak.R:105-134 — handles a "|" at
@@ -69,6 +82,46 @@ decompose_composite_names <- function(composite_names) {
   res
 }
 
+# Internal: resolve each composite-child location to at most one atomic
+# location_period_id + pop. It matches on the exact location string first, then
+# falls back to a normalized key that strips a trailing " Sanitary District"
+# from the terminal admin token. The taxonomy stores many BDI health-system
+# units as "<name> Sanitary District" while composite children carry the bare
+# admin name, so the exact join alone leaves most children unmatched even though
+# the like-named district LP (and its geometry) is present in the country pull.
+# Each child is resolved to a SINGLE LP (deterministic: prefer non-NA pop, then
+# lowest location_period_id) so that downstream population sums over distinct
+# child LPs never double-count multiple location periods of the same place.
+match_children_to_lps <- function(child_tbl, loc_lookup) {
+  strip_sd <- function(x) sub(" Sanitary District$", "", x)
+
+  atomic <- loc_lookup %>%
+    dplyr::mutate(.key_norm = strip_sd(location)) %>%
+    dplyr::arrange(is.na(pop), location_period_id)
+
+  exact <- atomic %>%
+    dplyr::distinct(location, .keep_all = TRUE) %>%
+    dplyr::select(location,
+                  lp_exact  = location_period_id,
+                  pop_exact = pop)
+
+  norm <- atomic %>%
+    dplyr::distinct(.key_norm, .keep_all = TRUE) %>%
+    dplyr::select(.key_norm,
+                  lp_norm  = location_period_id,
+                  pop_norm = pop)
+
+  child_tbl %>%
+    dplyr::mutate(.key_norm = strip_sd(location)) %>%
+    dplyr::left_join(exact, by = "location") %>%
+    dplyr::left_join(norm, by = ".key_norm") %>%
+    dplyr::mutate(
+      location_period_id = dplyr::coalesce(lp_exact, lp_norm),
+      pop = dplyr::if_else(!is.na(lp_exact), pop_exact, pop_norm)
+    ) %>%
+    dplyr::select(composite_name, location, location_period_id, pop)
+}
+
 # Internal: return the parent location string (all tokens before the first
 # pipe-containing token). Returns NA_character_ when the pipe is in the first
 # or second token (country level — no meaningful parent available).
@@ -85,21 +138,32 @@ get_composite_parent <- function(composite_name) {
 #' @name build_composite_locations
 #' @description Resolve composite locations (NA location_period_id, "|"-joined
 #'   names) into synthetic "composite_loc_<ISO3>_<n>" pseudo location periods so
-#'   that Stage 2 outbreak detection can run on them. Population for each
-#'   composite is the sum of its children's WorldPop populations (already
-#'   attached by add_population()); geometry is the union of its children's
-#'   geometries from raw_sf. When composite children are not individually
-#'   observed, a parent-location fallback provides pop and geometry.
+#'   that Stage 2 outbreak detection can run on them. Geometry is the union of a
+#'   composite's children's geometries from raw_sf (parent-location fallback when
+#'   children are not individually observed). Population: when \code{raster_dir}
+#'   is supplied, it is estimated directly from WorldPop on that composite
+#'   geometry (the true sub-area denominator); otherwise it is the sum of the
+#'   children's WorldPop populations (attached by add_population()), with a
+#'   parent-location pop fallback.
 #' @param normalized data.frame: the normalized weekly data AFTER
 #'   add_population(), so atomic location_period_ids carry a pop column.
 #' @param raw_sf sf: geometry-bearing data from the Stage 1 geo files, keyed by
 #'   location_period_id.
 #' @param iso3 character: ISO3 country code, used to namespace composite ids and
 #'   to gate the known-LP corrections for SSD/SOM.
+#' @param raster_dir character or NULL: when supplied, each composite's
+#'   population is estimated directly from the constrained WorldPop raster on the
+#'   composite (child-union or parent-fallback) geometry via
+#'   \code{estimate_pop_for_geometries()}. This geometry-derived denominator is
+#'   the true sub-area population and is the primary source; the summed-child and
+#'   parent-polygon populations (steps 5/5b) are retained only as fallbacks for
+#'   composites whose geometry the raster extraction could not resolve. When NULL
+#'   (default), the previous summed-child / parent-polygon behaviour is used.
 #' @return list(data = normalized with composites resolved,
 #'              geometry = sf(lctn_pr, area_per_1km2, geometry) for composites,
 #'                         or NULL when there are none).
-build_composite_locations <- function(normalized, raw_sf, iso3) {
+build_composite_locations <- function(normalized, raw_sf, iso3,
+                                       raster_dir = NULL) {
 
   iso3 <- toupper(regmatches(iso3, regexpr("[A-Z]{3}", iso3)))
 
@@ -136,7 +200,7 @@ build_composite_locations <- function(normalized, raw_sf, iso3) {
       dplyr::anti_join(loc_lookup, by = "location")
   )
 
-  cp <- dplyr::left_join(child_tbl, loc_lookup, by = "location")
+  cp <- match_children_to_lps(child_tbl, loc_lookup)
 
   n_missing <- sum(is.na(cp$location_period_id))
   if (n_missing > 0L) {
@@ -235,7 +299,9 @@ build_composite_locations <- function(normalized, raw_sf, iso3) {
     dplyr::summarise(geometry = sf::st_union(geometry), .groups = "drop") %>%
     dplyr::mutate(
       lctn_pr       = composite_id,
-      area_per_1km2 = as.numeric(sf::st_area(geometry)) / 1e6
+      area_per_1km2 = as.numeric(sf::st_area(
+        sf::st_transform(geometry, "+proj=moll")
+      )) / 1e6
     ) %>%
     dplyr::select(lctn_pr, area_per_1km2)
 
@@ -273,7 +339,9 @@ build_composite_locations <- function(normalized, raw_sf, iso3) {
         dplyr::filter(!sf::st_is_empty(geometry)) %>%
         dplyr::mutate(
           lctn_pr       = composite_id,
-          area_per_1km2 = as.numeric(sf::st_area(geometry)) / 1e6
+          area_per_1km2 = as.numeric(sf::st_area(
+            sf::st_transform(geometry, "+proj=moll")
+          )) / 1e6
         ) %>%
         dplyr::select(lctn_pr, area_per_1km2)
 
@@ -289,6 +357,72 @@ build_composite_locations <- function(normalized, raw_sf, iso3) {
     sf::st_crs(composite_geom) <- sf::st_crs(raw_sf)
   } else {
     composite_geom <- NULL
+  }
+
+  # 6c. Geometry-derived population (primary source when raster_dir given) ----
+  # Estimate each composite's population directly from WorldPop on its
+  # (child-union or parent-fallback) geometry. This is the true sub-area
+  # denominator; it overrides the summed-child / parent-polygon pop from step 5
+  # wherever the raster extraction resolves. Composites whose geometry could not
+  # be resolved keep the step-5 fallback pop.
+  if (!is.null(raster_dir) && !is.null(composite_geom) &&
+      nrow(composite_geom) > 0L) {
+
+    # Representative year per composite = median year(TL) over its rows.
+    comp_year <- normalized %>%
+      dplyr::filter(location %in% comp_ids$composite_name) %>%
+      dplyr::left_join(comp_ids, by = c("location" = "composite_name")) %>%
+      dplyr::group_by(composite_id) %>%
+      dplyr::summarise(
+        year = as.integer(stats::median(lubridate::year(TL))),
+        .groups = "drop"
+      )
+
+    geom_years <- data.frame(lctn_pr = composite_geom$lctn_pr,
+                             stringsAsFactors = FALSE) %>%
+      dplyr::left_join(comp_year, by = c("lctn_pr" = "composite_id"))
+    geom_years$year[is.na(geom_years$year)] <-
+      as.integer(stats::median(geom_years$year, na.rm = TRUE))
+
+    geom_pop_vals <- tryCatch(
+      estimate_pop_for_geometries(
+        geom_sf      = composite_geom,
+        country_iso3 = iso3,
+        year         = geom_years$year,
+        raster_dir   = raster_dir
+      ),
+      error = function(e) {
+        message("  build_composite_locations(): geometry-derived pop failed (",
+                conditionMessage(e), ") — keeping summed-child/parent pop.")
+        rep(NA_real_, nrow(composite_geom))
+      }
+    )
+
+    geom_pop_df <- comp_ids %>%
+      dplyr::left_join(
+        data.frame(composite_id = composite_geom$lctn_pr,
+                   geom_pop      = as.numeric(geom_pop_vals),
+                   stringsAsFactors = FALSE),
+        by = "composite_id"
+      ) %>%
+      dplyr::select(composite_name, geom_pop)
+
+    n_geom_pop <- sum(!is.na(geom_pop_df$geom_pop) & geom_pop_df$geom_pop > 0)
+    if (n_geom_pop > 0L)
+      message("  ", n_geom_pop,
+              " composite(s) using WorldPop-on-geometry as population ",
+              "(true sub-area denominator).")
+
+    comp_pop <- comp_pop %>%
+      dplyr::left_join(geom_pop_df, by = "composite_name") %>%
+      dplyr::mutate(
+        composite_pop = dplyr::if_else(
+          !is.na(geom_pop) & geom_pop > 0,
+          geom_pop,
+          composite_pop
+        )
+      ) %>%
+      dplyr::select(-geom_pop)
   }
 
   # 7. Rewrite composite rows in the normalized data -------------------------

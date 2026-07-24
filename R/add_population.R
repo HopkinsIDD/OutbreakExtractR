@@ -273,3 +273,119 @@ add_population <- function(normalized_data, raw_sf, country_iso3,
 
   normalized_data
 }
+
+#' @export
+#' @title estimate_pop_for_geometries
+#' @name estimate_pop_for_geometries
+#' @description Estimate a UN-adjusted WorldPop population for each polygon in an
+#'   sf object by extracting the constrained WorldPop raster directly on the
+#'   geometry. Intended for composite locations, whose denominator should be the
+#'   population of the actual (child-union) sub-area rather than the sum of
+#'   child populations or the parent-admin polygon. Mirrors the WorldPop machinery
+#'   in \code{add_population()} (one raster load per year, one adjustment-factor
+#'   \code{exact_extract} on the country boundary, one vectorized
+#'   \code{exact_extract} for all geometries in that year) and reuses the same
+#'   geometry sanitation (\code{st_make_valid}, drop empty/non-polygon, cast to
+#'   MULTIPOLYGON) so mixed-type / POINT / empty geometries do not crash the
+#'   extraction.
+#' @param geom_sf sf: polygons to estimate population for. One value is returned
+#'   per row, in input order.
+#' @param country_iso3 character: ISO3 country code (e.g. "BDI"); a sub-national
+#'   suffix is tolerated (the leading 3-letter code is extracted).
+#' @param year integer: representative year(s), length 1 (recycled) or
+#'   \code{nrow(geom_sf)}. Clamped to the WorldPop constrained range 2015-2030.
+#' @param raster_dir character: directory for caching WorldPop rasters.
+#' @return numeric vector of length \code{nrow(geom_sf)} with the UN-adjusted
+#'   population per geometry (NA where the raster is unavailable or the geometry
+#'   is unusable).
+estimate_pop_for_geometries <- function(geom_sf, country_iso3, year,
+                                         raster_dir = "worldpop") {
+
+  n <- nrow(geom_sf)
+  if (n == 0L) return(numeric(0L))
+
+  country_iso3     <- toupper(country_iso3)
+  iso3_for_boundary <- regmatches(country_iso3, regexpr("[A-Z]{3}", country_iso3))
+
+  # Representative year per geometry, clamped to the WorldPop range.
+  if (length(year) == 1L) year <- rep(year, n)
+  if (length(year) != n) {
+    stop("estimate_pop_for_geometries(): 'year' must have length 1 or nrow(geom_sf).")
+  }
+  year <- pmax(2015L, pmin(2030L, as.integer(year)))
+
+  # Work in EPSG:4326 (WorldPop CRS); keep an explicit row index for reassembly.
+  geoms_sfc <- sf::st_geometry(sf::st_make_valid(geom_sf))
+  if (is.na(sf::st_crs(geoms_sfc))) sf::st_crs(geoms_sfc) <- 4326
+  geoms_sfc <- sf::st_transform(geoms_sfc, 4326)
+
+  # Country boundary for the UN adjustment factor (fetched once).
+  country_shp <- tryCatch(
+    sf::st_transform(rgeoboundaries::gb_adm0(country = iso3_for_boundary), 4326),
+    error = function(e) {
+      message("estimate_pop_for_geometries(): gb_adm0() failed: ",
+              conditionMessage(e), " — using union of input geometries as boundary.")
+      sf::st_sf(geometry = sf::st_union(geoms_sfc))
+    }
+  )
+
+  data("WPP2024", package = "OutbreakExtractR", envir = environment())
+
+  pop_out <- rep(NA_real_, n)
+
+  for (yr in sort(unique(year))) {
+    idx <- which(year == yr)
+
+    raster_path <- tryCatch(
+      download_worldpop_constrained(iso3_for_boundary, yr, dest_dir = raster_dir),
+      error = function(e) {
+        message("  estimate_pop_for_geometries(): raster download failed for ",
+                yr, ": ", conditionMessage(e))
+        NULL
+      }
+    )
+    if (is.null(raster_path)) next
+
+    pop_raster <- raster::raster(raster_path)
+
+    # Adjustment factor: one exact_extract on the country boundary.
+    country_raw <- tryCatch(
+      sum(exactextractr::exact_extract(pop_raster, sf::st_geometry(country_shp), "sum"),
+          na.rm = TRUE),
+      error = function(e) 0
+    )
+    tot_UN <- WPP2024$PopTotal[
+      WPP2024$Time == yr & WPP2024$ISO3_code == iso3_for_boundary
+    ] * 1e3
+    adj_factor <- if (length(tot_UN) == 1L && country_raw > 0) tot_UN / country_raw else 1.0
+
+    # Sanitize this year's geometries (same guards as add_population()).
+    this_sfc <- geoms_sfc[idx]
+    dims     <- sf::st_dimension(this_sfc)
+    good     <- !is.na(dims) & dims == 2L
+    if (!any(good)) {
+      rm(pop_raster); gc(verbose = FALSE); next
+    }
+    keep_idx <- idx[good]
+    this_sfc <- this_sfc[good]
+
+    geom_types <- unique(as.character(sf::st_geometry_type(this_sfc)))
+    if (length(geom_types) > 1L || identical(geom_types, "POLYGON")) {
+      this_sfc <- sf::st_cast(this_sfc, "MULTIPOLYGON", warn = FALSE)
+    }
+
+    raw_pops <- tryCatch(
+      exactextractr::exact_extract(pop_raster, this_sfc, "sum"),
+      error = function(e) {
+        message("  estimate_pop_for_geometries(): extraction failed for year ",
+                yr, ": ", conditionMessage(e))
+        rep(NA_real_, length(this_sfc))
+      }
+    )
+    pop_out[keep_idx] <- as.numeric(raw_pops) * adj_factor
+
+    rm(pop_raster); gc(verbose = FALSE)
+  }
+
+  pop_out
+}

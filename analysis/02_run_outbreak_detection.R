@@ -235,8 +235,9 @@ if (!is.null(raw_sf)) {
 
 # ---------------------------------------------------------------------------
 # Resolve composite locations (NA location_period_id, "|"-joined names) into
-# composite_loc_<ISO3>_* pseudo-LPs with summed child population and unioned
-# child geometry, so they survive detection (otherwise NA pop drops them).
+# composite_loc_<ISO3>_* pseudo-LPs with unioned child geometry and a
+# WorldPop-on-geometry population (raster_dir passed below), so they survive
+# detection (otherwise NA pop drops them).
 # ---------------------------------------------------------------------------
 
 composite_geom <- NULL
@@ -245,7 +246,8 @@ if (!is.null(raw_sf)) {
     OutbreakExtractR::build_composite_locations(
       normalized = normalized,
       raw_sf     = raw_sf,
-      iso3       = opt$country_iso3
+      iso3       = opt$country_iso3,
+      raster_dir = here::here(opt$raster_dir)
     ),
     error = function(e) {
       warning("build_composite_locations() failed for ",

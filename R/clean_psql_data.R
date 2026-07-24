@@ -54,7 +54,14 @@ clean_psql_data <- function(
                   primary == "f" ~ FALSE,                      # psql source: "f"/"t" strings
                   primary == "t" ~ TRUE)
     ) %>% 
-    dplyr::filter(primary) %>% ## always only keep primary data
+    ## Keep primary data, but retain composite locations ("|"-joined names) that
+    ## only ever appear as non-primary; otherwise they are silently dropped here,
+    ## before Stage 2 (e.g. SEN "AFR::SEN::Saint-Louis::Dagana::Mbane|Ross-Bethio",
+    ## which is primary = FALSE for every row). A composite that also has a
+    ## primary version still keeps only its primary rows (no double-counting).
+    dplyr::group_by(location) %>%
+    dplyr::filter(primary | (stringr::str_detect(location, "\\|") & !any(primary %in% TRUE))) %>%
+    dplyr::ungroup() %>%
     dplyr::mutate(
       date_range = TR-TL+1,
       temporal_scale = dplyr::case_when(

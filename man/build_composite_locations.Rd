@@ -4,17 +4,26 @@
 \alias{build_composite_locations}
 \title{build_composite_locations}
 \usage{
-build_composite_locations(normalized, raw_sf, iso3)
+build_composite_locations(normalized, raw_sf, iso3, raster_dir = NULL)
 }
 \arguments{
 \item{normalized}{data.frame: the normalized weekly data AFTER
 add_population(), so atomic location_period_ids carry a pop column.}
 
 \item{raw_sf}{sf: geometry-bearing data from the Stage 1 geo files, keyed by
-location_period_id (raw API ids — same id space as normalized).}
+location_period_id.}
 
 \item{iso3}{character: ISO3 country code, used to namespace composite ids and
-to gate the known-LP corrections.}
+to gate the known-LP corrections for SSD/SOM.}
+
+\item{raster_dir}{character or NULL: when supplied, each composite's
+population is estimated directly from the constrained WorldPop raster on the
+composite (child-union or parent-fallback) geometry via
+\code{estimate_pop_for_geometries()}. This geometry-derived denominator is
+the true sub-area population and is the primary source; the summed-child and
+parent-polygon populations (steps 5/5b) are retained only as fallbacks for
+composites whose geometry the raster extraction could not resolve. When NULL
+(default), the previous summed-child / parent-polygon behaviour is used.}
 }
 \value{
 list(data = normalized with composites resolved,
@@ -24,8 +33,11 @@ or NULL when there are none).
 \description{
 Resolve composite locations (NA location_period_id, "|"-joined
 names) into synthetic "composite_loc_\if{html}{\out{<ISO3>}}_\if{html}{\out{<n>}}" pseudo location periods so
-that Stage 2 outbreak detection can run on them. Population for each
-composite is the sum of its children's WorldPop populations (already
-attached by add_population()); geometry is the union of its children's
-geometries.
+that Stage 2 outbreak detection can run on them. Geometry is the union of a
+composite's children's geometries from raw_sf (parent-location fallback when
+children are not individually observed). Population: when \code{raster_dir}
+is supplied, it is estimated directly from WorldPop on that composite
+geometry (the true sub-area denominator); otherwise it is the sum of the
+children's WorldPop populations (attached by add_population()), with a
+parent-location pop fallback.
 }
