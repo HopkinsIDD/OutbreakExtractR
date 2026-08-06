@@ -262,6 +262,37 @@ if (!is.null(raw_sf)) {
 }
 
 # ---------------------------------------------------------------------------
+# Population QC gates
+#
+# Runs AFTER the composite block so that composite pseudo-LPs are covered too.
+# on_fail = "warn": gate 4 currently fails corpus-wide (alias records sharing a
+# geometry), so aborting here would prevent any full re-extraction from
+# completing. The per-country CSV is aggregated by 03_aggregate_results.R into
+# one reviewable corpus-wide artefact.
+# ---------------------------------------------------------------------------
+pop_qa <- tryCatch(
+  OutbreakExtractR::validate_population(
+    lp_pop  = normalized,
+    iso3    = opt$country_iso3,
+    on_fail = "warn"
+  ),
+  error = function(e) {
+    warning("validate_population() failed for ", opt$who_region, "::",
+            opt$country_iso3, ": ", conditionMessage(e))
+    NULL
+  }
+)
+
+if (!is.null(pop_qa)) {
+  qa_file <- file.path(
+    dirname(out_file),
+    sprintf("stage2_popqa_%s_%s.csv", opt$who_region, opt$country_iso3)
+  )
+  utils::write.csv(pop_qa, qa_file, row.names = FALSE)
+  message("Population QC written: ", basename(qa_file))
+}
+
+# ---------------------------------------------------------------------------
 # Outbreak detection over full per-country series (no customized_TL/TR)
 # Threshold = mean weekly incidence over the entire time series, matching reference
 # ---------------------------------------------------------------------------

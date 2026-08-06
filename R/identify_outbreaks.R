@@ -25,6 +25,7 @@ filter_small_outbreaks <- function(df, min_total_cases) {
 #' @param customized_TR: customize the upper bound of time for outbreak estimation
 #' @param cumulative_min_cases: numeric: minimum cumulative cases. Used by the dual_window cumulative trigger and, when \code{filter_outbreaks_by_size = TRUE}, as the minimum total-case threshold for the post-detection size filter.
 #' @param filter_outbreaks_by_size: logical: when TRUE, drop detected outbreaks whose total cases (summed over the full outbreak window) fall below \code{cumulative_min_cases}. Default FALSE (no filtering, backward compatible).
+#' @param keep_nonoutbreak_locations: logical: when TRUE, locations that never trigger an epidemic start are returned as their full time series labelled \code{outbreak_number = 0} and \code{`Time Period` = "non-outbreak period"}, instead of an empty data.frame. Use this to retain every location in the output rather than silently dropping those without a detected outbreak. Default FALSE (backward compatible).
 #' @export
 #' @return list of dataframes
 
@@ -45,7 +46,8 @@ identify_outbreaks <- function(
     cumulative_min_cases=cumulative_min_cases,
     nonzero_windows = nonzero_windows,
     tail_period =6,
-    filter_outbreaks_by_size = FALSE
+    filter_outbreaks_by_size = FALSE,
+    keep_nonoutbreak_locations = FALSE
     ){
 
   # Identify cholera outbreak thresholds
@@ -148,6 +150,16 @@ identify_outbreaks <- function(
         mutate(
           `Time Period` = factor(`Time Period`,levels =c("outbreak period",'non-outbreak period'))
         )
+    } else if (isTRUE(keep_nonoutbreak_locations) &&
+               nrow(preoutbreak_by_location_start_end_washout) > 0) {
+      # No epidemic start for this location. Rather than dropping it, keep the
+      # full series labelled as a non-outbreak period so downstream consumers
+      # retain every location. Columns match the if-branch above.
+      preoutbreak_by_location_start_end_washout$outbreak_number <- 0
+      preoutbreak_by_location_start_end_washout$`Time Period` <- factor(
+        "non-outbreak period",
+        levels = c("outbreak period", "non-outbreak period")
+      )
     } else{
       preoutbreak_by_location_start_end_washout <-data.frame()
     }

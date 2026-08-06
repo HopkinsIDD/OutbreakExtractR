@@ -8,7 +8,8 @@ estimate_pop_for_geometries(
   geom_sf,
   country_iso3,
   year,
-  raster_dir = "worldpop"
+  raster_dir = "worldpop",
+  boundary_cache_dir = "country_boundaries"
 )
 }
 \arguments{
@@ -22,11 +23,15 @@ suffix is tolerated (the leading 3-letter code is extracted).}
 \code{nrow(geom_sf)}. Clamped to the WorldPop constrained range 2015-2030.}
 
 \item{raster_dir}{character: directory for caching WorldPop rasters.}
+
+\item{boundary_cache_dir}{character or NULL: directory for caching national
+boundaries, passed to \code{get_country_boundary()}.}
 }
 \value{
 numeric vector of length \code{nrow(geom_sf)} with the UN-adjusted
-population per geometry (NA where the raster is unavailable or the geometry
-is unusable).
+population per geometry (NA where the raster is unavailable, the geometry
+is unusable, or the raster sum is zero — zero is never returned as a
+population).
 }
 \description{
 Estimate a UN-adjusted WorldPop population for each polygon in an

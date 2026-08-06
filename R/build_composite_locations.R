@@ -153,17 +153,45 @@ get_composite_parent <- function(composite_name) {
 #'   to gate the known-LP corrections for SSD/SOM.
 #' @param raster_dir character or NULL: when supplied, each composite's
 #'   population is estimated directly from the constrained WorldPop raster on the
-#'   composite (child-union or parent-fallback) geometry via
-#'   \code{estimate_pop_for_geometries()}. This geometry-derived denominator is
-#'   the true sub-area population and is the primary source; the summed-child and
-#'   parent-polygon populations (steps 5/5b) are retained only as fallbacks for
-#'   composites whose geometry the raster extraction could not resolve. When NULL
-#'   (default), the previous summed-child / parent-polygon behaviour is used.
+#'   composite geometry via \code{estimate_pop_for_geometries()}.
+#' @param allow_parent_pop_fallback logical: when TRUE, a composite whose
+#'   population cannot be established from its own children may inherit its
+#'   parent location's population. Defaults to FALSE.
+#'
+#'   The parent of a composite is a strictly larger area, so inheriting its
+#'   population overstates the denominator by however much of the parent the
+#'   composite does not cover — the same pathology as the parent-inherited
+#'   geometry duplicates that \code{detect_duplicate_geometries()} flags. The
+#'   honest default is to leave such a composite with \code{pop = NA}, which
+#'   routes it to the "low" surveillance class, rather than to silently
+#'   substitute a value that is wrong in a known direction.
+#'
+#' @section Population precedence:
+#'   Sources are tried in this order, and the first that yields a usable
+#'   (positive, non-NA) value wins:
+#'   \enumerate{
+#'     \item \code{composite_union} — WorldPop extracted on the union of the
+#'       composite's *children's* geometries. This is the true sub-area
+#'       denominator.
+#'     \item \code{child_sum} — the sum of the children's own populations.
+#'     \item \code{parent_fallback} — the parent location's population, only
+#'       when \code{allow_parent_pop_fallback = TRUE}.
+#'   }
+#'
+#'   Ordering matters: the raster extraction is only treated as
+#'   \code{composite_union} when the geometry it ran on was a genuine child
+#'   union. When the composite fell back to its *parent's* polygon (step 6b),
+#'   extracting WorldPop on it returns the parent population, so that result is
+#'   classified as \code{parent_fallback} and is subject to the same gate.
+#'   Previously this path could install the parent population while presenting
+#'   it as a geometry-derived sub-area figure.
+#'
 #' @return list(data = normalized with composites resolved,
 #'              geometry = sf(lctn_pr, area_per_1km2, geometry) for composites,
 #'                         or NULL when there are none).
 build_composite_locations <- function(normalized, raw_sf, iso3,
-                                       raster_dir = NULL) {
+                                       raster_dir = NULL,
+                                       allow_parent_pop_fallback = FALSE) {
 
   iso3 <- toupper(regmatches(iso3, regexpr("[A-Z]{3}", iso3)))
 
@@ -217,64 +245,32 @@ build_composite_locations <- function(normalized, raw_sf, iso3,
     stringsAsFactors = FALSE
   )
 
-  # 5. Composite population = sum of distinct matched child-LP populations ----
+  # 5. Candidate population: sum of distinct matched child-LP populations -----
+  #    Held as a *candidate* only; precedence is resolved in step 6d once the
+  #    geometry-derived value is known.
+  #
+  #    sum(na.rm = TRUE) over a group whose children all have pop = NA returns
+  #    0, and a composite with no matched children at all is absent entirely.
+  #    Both must surface as NA, never 0: get_outbreak_threshold() routes
+  #    is.na(pop) to the "low" surveillance class, but pop == 0 gives
+  #    sCh / pop == Inf, which classifies as "high". A zero denominator would
+  #    therefore flip the detection threshold rather than merely be missing.
   comp_pop_raw <- cp %>%
     dplyr::filter(!is.na(location_period_id)) %>%
     dplyr::distinct(composite_name, location_period_id, pop) %>%
     dplyr::group_by(composite_name) %>%
-    dplyr::summarise(composite_pop = sum(pop, na.rm = TRUE), .groups = "drop")
+    dplyr::summarise(
+      child_sum_pop = if (all(is.na(pop))) NA_real_ else sum(pop, na.rm = TRUE),
+      .groups = "drop"
+    )
 
-  # Ensure every composite name is represented (zero when no children matched).
   comp_pop <- comp_ids %>%
     dplyr::select(composite_name, composite_id) %>%
     dplyr::left_join(comp_pop_raw, by = "composite_name") %>%
     dplyr::mutate(
-      composite_pop = dplyr::if_else(is.na(composite_pop), 0, composite_pop)
+      child_sum_pop = dplyr::if_else(!is.na(child_sum_pop) & child_sum_pop <= 0,
+                                     NA_real_, child_sum_pop)
     )
-
-  # 5b. Parent-location fallback: replace 0-pop composites with their parent's
-  # pop (all children were unobserved — e.g. BDI sanitary-district composites).
-  zero_pop_composites <- comp_pop$composite_name[comp_pop$composite_pop == 0]
-  if (length(zero_pop_composites) > 0L) {
-    parent_pop_df <- data.frame(
-      composite_name  = zero_pop_composites,
-      parent_location = vapply(zero_pop_composites, get_composite_parent,
-                               character(1L)),
-      stringsAsFactors = FALSE
-    ) %>%
-      dplyr::filter(!is.na(parent_location)) %>%
-      dplyr::left_join(
-        dplyr::select(loc_lookup_extended,
-                      parent_location = location,
-                      parent_pop = pop),
-        by = "parent_location"
-      )
-
-    n_ok  <- sum(!is.na(parent_pop_df$parent_pop))
-    n_bad <- length(zero_pop_composites) - n_ok
-    if (n_ok > 0L)
-      message("  ", n_ok,
-              " composite(s) using parent-location pop as fallback ",
-              "(children not observed atomically — denominator approximated).")
-    if (n_bad > 0L)
-      message("  ", n_bad,
-              " composite(s) have no pop (children + parent both absent); ",
-              "detection thresholds will be NaN.")
-
-    comp_pop <- comp_pop %>%
-      dplyr::left_join(
-        dplyr::select(parent_pop_df, composite_name, parent_pop),
-        by = "composite_name"
-      ) %>%
-      dplyr::mutate(
-        composite_pop = dplyr::if_else(
-          composite_pop == 0 & !is.na(parent_pop),
-          parent_pop,
-          composite_pop
-        )
-      ) %>%
-      dplyr::select(-parent_pop)
-  }
 
   # 6. Composite geometry: union of matched child geometries (sf left table) --
   geom_lookup <- raw_sf %>%
@@ -306,6 +302,7 @@ build_composite_locations <- function(normalized, raw_sf, iso3,
     dplyr::select(lctn_pr, area_per_1km2)
 
   # 6b. Parent-location geometry fallback for composites still without geom ---
+  parent_geom_ids      <- character(0)
   composites_with_geom <- composite_geom$lctn_pr  # character(0) when 0 rows
   needs_parent_geom    <- comp_ids$composite_id[
     !comp_ids$composite_id %in% composites_with_geom
@@ -349,6 +346,11 @@ build_composite_locations <- function(normalized, raw_sf, iso3,
         message("  ", nrow(parent_geom),
                 " composite(s) using parent geometry as fallback.")
         composite_geom <- rbind(composite_geom, parent_geom)
+        # Record which composites are standing on their parent's polygon. A
+        # raster extraction over such a geometry returns the PARENT's
+        # population, not the composite's, so it must not be presented as a
+        # geometry-derived sub-area denominator (step 6c/6d).
+        parent_geom_ids <- unique(parent_geom$lctn_pr)
       }
     }
   }
@@ -407,29 +409,98 @@ build_composite_locations <- function(normalized, raw_sf, iso3,
       ) %>%
       dplyr::select(composite_name, geom_pop)
 
-    n_geom_pop <- sum(!is.na(geom_pop_df$geom_pop) & geom_pop_df$geom_pop > 0)
-    if (n_geom_pop > 0L)
-      message("  ", n_geom_pop,
-              " composite(s) using WorldPop-on-geometry as population ",
-              "(true sub-area denominator).")
-
+    # Split the raster result by what polygon it actually ran on. Only a child
+    # union is a genuine sub-area denominator; a parent polygon yields the
+    # parent's population and is gated with the other parent fallbacks.
     comp_pop <- comp_pop %>%
       dplyr::left_join(geom_pop_df, by = "composite_name") %>%
       dplyr::mutate(
-        composite_pop = dplyr::if_else(
-          !is.na(geom_pop) & geom_pop > 0,
-          geom_pop,
-          composite_pop
-        )
+        geom_pop = dplyr::if_else(!is.na(geom_pop) & geom_pop <= 0,
+                                  NA_real_, geom_pop),
+        union_pop = dplyr::if_else(composite_id %in% parent_geom_ids,
+                                   NA_real_, geom_pop),
+        parent_geom_pop = dplyr::if_else(composite_id %in% parent_geom_ids,
+                                         geom_pop, NA_real_)
       ) %>%
       dplyr::select(-geom_pop)
+
+    n_union <- sum(!is.na(comp_pop$union_pop))
+    if (n_union > 0L)
+      message("  ", n_union,
+              " composite(s) using WorldPop-on-child-union as population ",
+              "(true sub-area denominator).")
+    n_pgeom <- sum(!is.na(comp_pop$parent_geom_pop))
+    if (n_pgeom > 0L)
+      message("  ", n_pgeom,
+              " composite(s) had only parent geometry — the raster value is a ",
+              "parent population, not a sub-area one.")
+  } else {
+    comp_pop$union_pop       <- NA_real_
+    comp_pop$parent_geom_pop <- NA_real_
   }
+
+  # 6d. Parent-location population candidate --------------------------------
+  parent_pop_lookup <- data.frame(
+    composite_name  = comp_pop$composite_name,
+    parent_location = vapply(comp_pop$composite_name, get_composite_parent,
+                             character(1L)),
+    stringsAsFactors = FALSE
+  ) %>%
+    dplyr::left_join(
+      dplyr::select(loc_lookup_extended,
+                    parent_location = location,
+                    parent_pop = pop),
+      by = "parent_location"
+    ) %>%
+    dplyr::distinct(composite_name, .keep_all = TRUE) %>%
+    dplyr::select(composite_name, parent_pop)
+
+  comp_pop <- comp_pop %>%
+    dplyr::left_join(parent_pop_lookup, by = "composite_name") %>%
+    dplyr::mutate(
+      parent_pop = dplyr::coalesce(parent_pop, parent_geom_pop),
+      parent_pop = dplyr::if_else(!is.na(parent_pop) & parent_pop <= 0,
+                                  NA_real_, parent_pop)
+    )
+
+  # 6e. Resolve precedence: child union > child sum > parent (gated) ---------
+  comp_pop <- comp_pop %>%
+    dplyr::mutate(
+      composite_pop = dplyr::case_when(
+        !is.na(union_pop)                                 ~ union_pop,
+        !is.na(child_sum_pop)                             ~ child_sum_pop,
+        allow_parent_pop_fallback & !is.na(parent_pop)    ~ parent_pop,
+        TRUE                                              ~ NA_real_
+      ),
+      composite_pop_source = dplyr::case_when(
+        !is.na(union_pop)                                 ~ "composite_union",
+        !is.na(child_sum_pop)                             ~ "child_sum",
+        allow_parent_pop_fallback & !is.na(parent_pop)    ~ "parent_fallback",
+        TRUE                                              ~ "none"
+      )
+    )
+
+  n_blocked <- sum(comp_pop$composite_pop_source == "none" &
+                     !is.na(comp_pop$parent_pop))
+  if (n_blocked > 0L) {
+    message("  ", n_blocked, " composite(s) could have inherited a parent ",
+            "population but allow_parent_pop_fallback = FALSE — pop left NA ",
+            "(they will fall into the 'low' surveillance class).")
+  }
+  n_none <- sum(comp_pop$composite_pop_source == "none")
+  if (n_none > 0L) {
+    message("  ", n_none, " composite(s) have no population from any source.")
+  }
+
+  comp_pop <- dplyr::select(comp_pop, -union_pop, -parent_geom_pop,
+                            -parent_pop, -child_sum_pop)
 
   # 7. Rewrite composite rows in the normalized data -------------------------
   data_out <- normalized %>%
     dplyr::left_join(comp_ids, by = c("location" = "composite_name")) %>%
     dplyr::left_join(
-      dplyr::select(comp_pop, composite_name, composite_pop),
+      dplyr::select(comp_pop, composite_name, composite_pop,
+                    composite_pop_source),
       by = c("location" = "composite_name")
     ) %>%
     dplyr::mutate(
@@ -441,8 +512,25 @@ build_composite_locations <- function(normalized, raw_sf, iso3,
         paste(as.character(spatial_scale), "composite"),
         as.character(spatial_scale)
       )
-    ) %>%
-    dplyr::select(-composite_id, -composite_pop)
+    )
+
+  # Composite rows carry their own population provenance; atomic rows keep the
+  # pop_source that add_population() assigned.
+  if ("pop_source" %in% names(data_out)) {
+    data_out <- data_out %>%
+      dplyr::mutate(
+        pop_source = dplyr::if_else(!is.na(composite_id),
+                                    composite_pop_source, pop_source)
+      )
+  } else {
+    data_out <- data_out %>%
+      dplyr::mutate(pop_source = dplyr::if_else(!is.na(composite_id),
+                                                composite_pop_source,
+                                                NA_character_))
+  }
+
+  data_out <- dplyr::select(data_out, -composite_id, -composite_pop,
+                            -composite_pop_source)
 
   # 9. Known atomic-LP corrections (SSD/SOM only) ----------------------------
   data_out <- apply_known_lp_fixes(data_out, iso3)

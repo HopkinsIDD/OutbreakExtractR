@@ -4,7 +4,13 @@
 \alias{add_population}
 \title{add_population}
 \usage{
-add_population(normalized_data, raw_sf, country_iso3, raster_dir = "worldpop")
+add_population(
+  normalized_data,
+  raw_sf,
+  country_iso3,
+  raster_dir = "worldpop",
+  boundary_cache_dir = "country_boundaries"
+)
 }
 \arguments{
 \item{normalized_data}{data.frame: weekly normalized data from the Stage 1
@@ -22,10 +28,25 @@ for the UN population adjustment factor.}
 
 \item{raster_dir}{character: directory for caching WorldPop raster files.
 Defaults to "worldpop". Created if it does not exist.}
+
+\item{boundary_cache_dir}{character or NULL: directory for caching national
+boundaries used by the UN adjustment. Passed to
+\code{get_country_boundary()}.}
 }
 \value{
-normalized_data with a numeric pop column added. Rows whose
-location_period_id has no matching geometry in raw_sf receive NA.
+normalized_data with a numeric \code{pop} column added, plus
+provenance columns: \code{pop_source}, \code{pop_geom_dup_n},
+\code{pop_geom_dup_class}, \code{pop_year_obs}, \code{pop_year_raster},
+\code{pop_natl_ref}, \code{adj_factor} and \code{adj_factor_flag}.
+Rows whose location_period_id has no matching geometry in raw_sf receive
+\code{pop = NA} (never 0 — see the note on zero denominators below).
+
+\code{pop} is \code{NA}, never 0, whenever a population cannot be
+established. \code{get_outbreak_threshold()} routes \code{is.na(pop)} to
+the "low" surveillance class, but \code{pop == 0} yields
+\code{sCh / pop == Inf}, which classifies as "high" — so a zero denominator
+silently flips the outbreak-detection threshold rather than merely
+producing a bad rate.
 }
 \description{
 Attach WorldPop population estimates to a normalized weekly

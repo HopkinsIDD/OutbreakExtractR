@@ -92,6 +92,43 @@ plan(sequential)
 
 combined <- purrr::list_rbind(purrr::keep(results_list, \(x) !is.null(x)))
 
+# ---------------------------------------------------------------------------
+# Aggregate the per-country population QC into one corpus-wide report
+# ---------------------------------------------------------------------------
+
+qa_files <- list.files(dirname(stage2_files[1]), pattern = "^stage2_popqa_.*\\.csv$",
+                       full.names = TRUE)
+
+if (length(qa_files) > 0) {
+  pop_qa <- purrr::list_rbind(purrr::map(qa_files, \(f) tryCatch(
+    read.csv(f, stringsAsFactors = FALSE),
+    error = function(e) {
+      warning("Failed to read QC file: ", basename(f), " — ", conditionMessage(e))
+      NULL
+    }
+  )))
+
+  if (nrow(pop_qa) > 0) {
+    qa_out <- file.path(opt$out_dir,
+                        paste0("population_qc_", opt$set_name, ".csv"))
+    write.csv(pop_qa, qa_out, row.names = FALSE)
+    message("Saved population QC: ", qa_out)
+
+    cat("\nPopulation QC summary (gates across ",
+        length(unique(pop_qa$iso3)), " countries):\n", sep = "")
+    qa_summary <- pop_qa %>%
+      dplyr::group_by(gate, description) %>%
+      dplyr::summarise(
+        countries_failing = sum(!passed & !record_only),
+        total_violations  = sum(n_violations, na.rm = TRUE),
+        .groups = "drop"
+      ) %>%
+      dplyr::arrange(gate)
+    print(as.data.frame(qa_summary), row.names = FALSE)
+    cat("\n")
+  }
+}
+
 cat("Combined result:\n")
 cat("  Total rows:    ", nrow(combined), "\n")
 cat("  Countries:     ", length(unique(combined$country_iso3)), "\n")

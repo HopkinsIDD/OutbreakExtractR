@@ -161,3 +161,183 @@ testthat::test_that("build_composite_locations keeps summed-child pop when geome
   comp_row <- res$data[grepl("composite_loc_ZZZ", res$data$location_period_id), ]
   testthat::expect_equal(comp_row$pop, 3000)   # falls back to summed child pop
 })
+
+# ---------------------------------------------------------------------------
+# Population precedence and the parent fallback gate
+# ---------------------------------------------------------------------------
+
+# A composite whose children are never observed atomically: only the parent
+# admin unit ("Prov") carries an LP, a geometry and a population.
+orphan_composite_fixture <- function() {
+  parent_poly <- sf::st_polygon(
+    list(rbind(c(0, 0), c(2, 0), c(2, 1), c(0, 1), c(0, 0))))
+  raw_sf <- sf::st_sf(
+    location_period_id = "900",
+    geometry = sf::st_sfc(parent_poly),
+    crs = 4326
+  )
+  normalized <- data.frame(
+    location = c("AFR::ZZZ::Prov", "AFR::ZZZ::Prov::Alpha|Beta"),
+    location_period_id = c("900", NA),
+    pop = c(7000, NA),
+    spatial_scale = c("admin1", "admin2"),
+    TL = as.Date(c("2018-01-01", "2018-01-01")),
+    pop_source = c("worldpop_constrained", NA),
+    stringsAsFactors = FALSE
+  )
+  list(raw_sf = raw_sf, normalized = normalized)
+}
+
+testthat::test_that("a composite with no child pop is left NA by default, not given its parent's", {
+  testthat::skip_if_not_installed("sf")
+  fx <- orphan_composite_fixture()
+
+  res <- suppressMessages(
+    build_composite_locations(fx$normalized, fx$raw_sf, "ZZZ"))
+
+  comp <- res$data[grepl("composite_loc_ZZZ", res$data$location_period_id), ]
+  testthat::expect_equal(nrow(comp), 1L)
+  # The parent is a strictly larger area, so inheriting 7000 would overstate the
+  # denominator by however much of Prov the composite does not cover. NA routes
+  # the composite to the "low" surveillance class instead.
+  testthat::expect_true(is.na(comp$pop))
+  testthat::expect_equal(comp$pop_source, "none")
+})
+
+testthat::test_that("allow_parent_pop_fallback = TRUE opts into the parent population", {
+  testthat::skip_if_not_installed("sf")
+  fx <- orphan_composite_fixture()
+
+  res <- suppressMessages(
+    build_composite_locations(fx$normalized, fx$raw_sf, "ZZZ",
+                              allow_parent_pop_fallback = TRUE))
+
+  comp <- res$data[grepl("composite_loc_ZZZ", res$data$location_period_id), ]
+  testthat::expect_equal(comp$pop, 7000)
+  testthat::expect_equal(comp$pop_source, "parent_fallback")
+})
+
+testthat::test_that("WorldPop run on a parent polygon is classified parent_fallback, not composite_union", {
+  testthat::skip_if_not_installed("sf")
+  fx <- orphan_composite_fixture()
+
+  # The composite has no child geometry, so step 6b puts it on the PARENT
+  # polygon. Extracting the raster there returns the parent's population — it
+  # must not be presented as a geometry-derived sub-area denominator.
+  testthat::local_mocked_bindings(
+    estimate_pop_for_geometries = function(geom_sf, country_iso3, year, ...) {
+      rep(5555, nrow(geom_sf))
+    }
+  )
+
+  gated <- suppressMessages(
+    build_composite_locations(fx$normalized, fx$raw_sf, "ZZZ",
+                              raster_dir = "ignored"))
+  comp <- gated$data[grepl("composite_loc_ZZZ", gated$data$location_period_id), ]
+  testthat::expect_true(is.na(comp$pop))
+  testthat::expect_equal(comp$pop_source, "none")
+
+  opted_in <- suppressMessages(
+    build_composite_locations(fx$normalized, fx$raw_sf, "ZZZ",
+                              raster_dir = "ignored",
+                              allow_parent_pop_fallback = TRUE))
+  comp2 <- opted_in$data[grepl("composite_loc_ZZZ", opted_in$data$location_period_id), ]
+  testthat::expect_equal(comp2$pop_source, "parent_fallback")
+  # The atomic parent pop (7000) is preferred over the raster-on-parent value.
+  testthat::expect_equal(comp2$pop, 7000)
+})
+
+testthat::test_that("build_composite_locations never manufactures a zero denominator", {
+  testthat::skip_if_not_installed("sf")
+
+  p1 <- sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1), c(0, 1), c(0, 0))))
+  p2 <- sf::st_polygon(list(rbind(c(1, 0), c(2, 0), c(2, 1), c(1, 1), c(1, 0))))
+  raw_sf <- sf::st_sf(
+    location_period_id = c("100", "200"),
+    geometry = sf::st_sfc(p1, p2),
+    crs = 4326
+  )
+  # Both children have pop = NA. sum(na.rm = TRUE) over them returns 0, which
+  # would give sCh/0 == Inf and flip the composite into the "high" class.
+  normalized <- data.frame(
+    location = c("AFR::ZZZ::Prov::Alpha", "AFR::ZZZ::Prov::Beta",
+                 "AFR::ZZZ::Prov::Alpha|Beta"),
+    location_period_id = c("100", "200", NA),
+    pop = c(NA_real_, NA_real_, NA_real_),
+    spatial_scale = rep("admin2", 3L),
+    TL = as.Date(rep("2018-01-01", 3L)),
+    stringsAsFactors = FALSE
+  )
+
+  res <- suppressMessages(build_composite_locations(normalized, raw_sf, "ZZZ"))
+  comp <- res$data[grepl("composite_loc_ZZZ", res$data$location_period_id), ]
+
+  testthat::expect_true(is.na(comp$pop))
+  testthat::expect_false(isTRUE(comp$pop == 0))
+  testthat::expect_equal(comp$pop_source, "none")
+})
+
+testthat::test_that("composite pop_source is recorded and atomic rows keep theirs", {
+  testthat::skip_if_not_installed("sf")
+
+  p1 <- sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1), c(0, 1), c(0, 0))))
+  p2 <- sf::st_polygon(list(rbind(c(1, 0), c(2, 0), c(2, 1), c(1, 1), c(1, 0))))
+  raw_sf <- sf::st_sf(
+    location_period_id = c("100", "200"),
+    geometry = sf::st_sfc(p1, p2),
+    crs = 4326
+  )
+  normalized <- data.frame(
+    location = c("AFR::ZZZ::Prov::Alpha", "AFR::ZZZ::Prov::Beta",
+                 "AFR::ZZZ::Prov::Alpha|Beta"),
+    location_period_id = c("100", "200", NA),
+    pop = c(1000, 2000, NA),
+    pop_source = c("worldpop_constrained", "worldpop_constrained", NA),
+    spatial_scale = rep("admin2", 3L),
+    TL = as.Date(rep("2018-01-01", 3L)),
+    stringsAsFactors = FALSE
+  )
+
+  res <- suppressMessages(build_composite_locations(normalized, raw_sf, "ZZZ"))
+
+  comp   <- res$data[grepl("composite_loc_ZZZ", res$data$location_period_id), ]
+  atomic <- res$data[res$data$location_period_id == "100", ]
+
+  testthat::expect_equal(comp$pop_source, "child_sum")
+  testthat::expect_equal(comp$pop, 3000)
+  testthat::expect_equal(atomic$pop_source, "worldpop_constrained")
+})
+
+testthat::test_that("geometry-derived pop on a genuine child union is classified composite_union", {
+  testthat::skip_if_not_installed("sf")
+
+  p1 <- sf::st_polygon(list(rbind(c(0, 0), c(1, 0), c(1, 1), c(0, 1), c(0, 0))))
+  p2 <- sf::st_polygon(list(rbind(c(1, 0), c(2, 0), c(2, 1), c(1, 1), c(1, 0))))
+  raw_sf <- sf::st_sf(
+    location_period_id = c("100", "200"),
+    geometry = sf::st_sfc(p1, p2),
+    crs = 4326
+  )
+  normalized <- data.frame(
+    location = c("AFR::ZZZ::Prov::Alpha", "AFR::ZZZ::Prov::Beta",
+                 "AFR::ZZZ::Prov::Alpha|Beta"),
+    location_period_id = c("100", "200", NA),
+    pop = c(1000, 2000, NA),
+    spatial_scale = rep("admin2", 3L),
+    TL = as.Date(rep("2018-01-01", 3L)),
+    stringsAsFactors = FALSE
+  )
+
+  testthat::local_mocked_bindings(
+    estimate_pop_for_geometries = function(geom_sf, country_iso3, year, ...) {
+      rep(5555, nrow(geom_sf))
+    }
+  )
+
+  res <- suppressMessages(
+    build_composite_locations(normalized, raw_sf, "ZZZ", raster_dir = "ignored"))
+  comp <- res$data[grepl("composite_loc_ZZZ", res$data$location_period_id), ]
+
+  testthat::expect_equal(comp$pop, 5555)
+  testthat::expect_equal(comp$pop_source, "composite_union")
+})

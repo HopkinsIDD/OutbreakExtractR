@@ -4,7 +4,13 @@
 \alias{build_composite_locations}
 \title{build_composite_locations}
 \usage{
-build_composite_locations(normalized, raw_sf, iso3, raster_dir = NULL)
+build_composite_locations(
+  normalized,
+  raw_sf,
+  iso3,
+  raster_dir = NULL,
+  allow_parent_pop_fallback = FALSE
+)
 }
 \arguments{
 \item{normalized}{data.frame: the normalized weekly data AFTER
@@ -18,12 +24,19 @@ to gate the known-LP corrections for SSD/SOM.}
 
 \item{raster_dir}{character or NULL: when supplied, each composite's
 population is estimated directly from the constrained WorldPop raster on the
-composite (child-union or parent-fallback) geometry via
-\code{estimate_pop_for_geometries()}. This geometry-derived denominator is
-the true sub-area population and is the primary source; the summed-child and
-parent-polygon populations (steps 5/5b) are retained only as fallbacks for
-composites whose geometry the raster extraction could not resolve. When NULL
-(default), the previous summed-child / parent-polygon behaviour is used.}
+composite geometry via \code{estimate_pop_for_geometries()}.}
+
+\item{allow_parent_pop_fallback}{logical: when TRUE, a composite whose
+population cannot be established from its own children may inherit its
+parent location's population. Defaults to FALSE.
+
+The parent of a composite is a strictly larger area, so inheriting its
+population overstates the denominator by however much of the parent the
+composite does not cover — the same pathology as the parent-inherited
+geometry duplicates that \code{detect_duplicate_geometries()} flags. The
+honest default is to leave such a composite with \code{pop = NA}, which
+routes it to the "low" surveillance class, rather than to silently
+substitute a value that is wrong in a known direction.}
 }
 \value{
 list(data = normalized with composites resolved,
@@ -41,3 +54,25 @@ geometry (the true sub-area denominator); otherwise it is the sum of the
 children's WorldPop populations (attached by add_population()), with a
 parent-location pop fallback.
 }
+\section{Population precedence}{
+
+Sources are tried in this order, and the first that yields a usable
+(positive, non-NA) value wins:
+\enumerate{
+\item \code{composite_union} — WorldPop extracted on the union of the
+composite's \emph{children's} geometries. This is the true sub-area
+denominator.
+\item \code{child_sum} — the sum of the children's own populations.
+\item \code{parent_fallback} — the parent location's population, only
+when \code{allow_parent_pop_fallback = TRUE}.
+}
+
+Ordering matters: the raster extraction is only treated as
+\code{composite_union} when the geometry it ran on was a genuine child
+union. When the composite fell back to its \emph{parent's} polygon (step 6b),
+extracting WorldPop on it returns the parent population, so that result is
+classified as \code{parent_fallback} and is subject to the same gate.
+Previously this path could install the parent population while presenting
+it as a geometry-derived sub-area figure.
+}
+

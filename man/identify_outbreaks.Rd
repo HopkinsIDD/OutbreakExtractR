@@ -21,7 +21,8 @@ identify_outbreaks(
   cumulative_min_cases = cumulative_min_cases,
   nonzero_windows = nonzero_windows,
   tail_period = 6,
-  filter_outbreaks_by_size = FALSE
+  filter_outbreaks_by_size = FALSE,
+  keep_nonoutbreak_locations = FALSE
 )
 }
 \arguments{
@@ -40,6 +41,8 @@ identify_outbreaks(
 \item{cumulative_min_cases:}{numeric: minimum cumulative cases. Used by the dual_window cumulative trigger and, when \code{filter_outbreaks_by_size = TRUE}, as the minimum total-case threshold for the post-detection size filter.}
 
 \item{filter_outbreaks_by_size:}{logical: when TRUE, drop detected outbreaks whose total cases (summed over the full outbreak window) fall below \code{cumulative_min_cases}. Default FALSE (no filtering, backward compatible).}
+
+\item{keep_nonoutbreak_locations:}{logical: when TRUE, locations that never trigger an epidemic start are returned as their full time series labelled \code{outbreak_number = 0} and \code{`Time Period` = "non-outbreak period"}, instead of an empty data.frame. Use this to retain every location in the output rather than silently dropping those without a detected outbreak. Default FALSE (backward compatible).}
 }
 \value{
 list of dataframes
