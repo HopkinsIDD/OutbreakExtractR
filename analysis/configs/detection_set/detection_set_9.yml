@@ -1,0 +1,36 @@
+api_website: https://cholera-taxonomy.middle-distance.com
+who_region: AFR
+country_iso3: COD
+spatial_scale_filter:
+- country
+- admin1
+- admin2
+- admin3
+time_lower_bound: '2010-01-01'
+time_upper_bound: '2015-12-31'
+temporal_scale_filter:
+- daily
+- weekly
+remove_na_sCh: yes
+remove_na_cCh: no
+remove_na_locationperiod: no
+minimum_daily_cases: 0
+threshold_type: mean weekly incidence rate
+fixed_outbreak_threshold: ~
+zero_case_assumption: yes
+outbreak_start_definition: consecutive
+min_weeks_above: 2
+require_increasing_trend: no
+tail_period: 6
+window_weeks: 3
+use_cumulative_trigger: yes
+cumulative_trigger_type: cumulative_case_threshold_and_min_cases
+cumulative_windows: 3
+cumulative_case_threshold_ratio: 1.5
+cumulative_min_cases: 50
+nonzero_windows: ~
+filter_outbreaks_by_size: yes
+raster_dir: analysis/worldpop
+set_name: default
+output_dir: analysis/generated_data
+use_geoparquet: no

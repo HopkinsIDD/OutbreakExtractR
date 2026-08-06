@@ -6,8 +6,39 @@
 clean_psql_data <- function(
     original_data,...
 ){
-  
-  library(tidyverse)
+
+
+  # ---------------------------------------------------------------------------
+  # Normalize taxdat API column names to OutbreakExtractR conventions.
+  # taxdat::rename_database_fields(source = "api") produces different column
+  # names than a direct psql export. This block maps either naming convention
+  # to the names expected by the rest of this function, making it compatible
+  # with both data sources.
+  #
+  # API names           -> OutbreakExtractR names
+  # is_primary          -> primary
+  # locationPeriod_id   -> location_period_id
+  # OC_UID              -> observation_collection_id
+  # location_name       -> location
+  # attributes.fields.suspected_cases  -> sCh
+  # attributes.fields.confirmed_cases  -> cCh
+  # attributes.fields.deaths           -> deaths
+  # ---------------------------------------------------------------------------
+  col_map <- c(
+    primary                  = "is_primary",
+    location_period_id       = "locationPeriod_id",
+    observation_collection_id = "OC_UID",
+    location                 = "location_name",
+    sCh                      = "attributes.fields.suspected_cases",
+    cCh                      = "attributes.fields.confirmed_cases",
+    deaths                   = "attributes.fields.deaths"
+  )
+  for (new_name in names(col_map)) {
+    old_name <- col_map[[new_name]]
+    if (old_name %in% names(original_data) && !new_name %in% names(original_data)) {
+      original_data <- dplyr::rename(original_data, !!new_name := !!old_name)
+    }
+  }
 
   # clean the location names (keep updated)
   # clean and add descriptive columns
@@ -19,10 +50,18 @@ clean_psql_data <- function(
       TL = lubridate::ymd(TL),
       TR = lubridate::ymd(TR),
       primary = dplyr::case_when(
-                  primary == "f" ~ FALSE,
+                  is.logical(primary) ~ as.logical(primary),  # API source: already TRUE/FALSE
+                  primary == "f" ~ FALSE,                      # psql source: "f"/"t" strings
                   primary == "t" ~ TRUE)
     ) %>% 
-    dplyr::filter(primary) %>% ## always only keep primary data
+    ## Keep primary data, but retain composite locations ("|"-joined names) that
+    ## only ever appear as non-primary; otherwise they are silently dropped here,
+    ## before Stage 2 (e.g. SEN "AFR::SEN::Saint-Louis::Dagana::Mbane|Ross-Bethio",
+    ## which is primary = FALSE for every row). A composite that also has a
+    ## primary version still keeps only its primary rows (no double-counting).
+    dplyr::group_by(location) %>%
+    dplyr::filter(primary | (stringr::str_detect(location, "\\|") & !any(primary %in% TRUE))) %>%
+    dplyr::ungroup() %>%
     dplyr::mutate(
       date_range = TR-TL+1,
       temporal_scale = dplyr::case_when(

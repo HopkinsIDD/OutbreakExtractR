@@ -32,3 +32,6 @@ numeric
 \description{
 this function is used to get population data for each location period
 }
+\details{
+Estimate population function - updated in May 2026: use the updated population raster between 2015-2030
+}

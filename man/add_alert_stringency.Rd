@@ -6,9 +6,6 @@
 \usage{
 add_alert_stringency(basedf)
 }
-\arguments{
-\item{basedf}{}
-}
 \value{
 dataframe
 }
