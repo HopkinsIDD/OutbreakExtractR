@@ -116,20 +116,46 @@ validate_population <- function(lp_pop, iso3, on_fail = c("warn", "abort"),
   }
 
   # -- Gate 6: no LP exceeds the national total ------------------------------
-  natl <- wpp_total
-  if (is.null(natl) && has("pop_natl_ref")) {
-    natl <- suppressWarnings(stats::median(lp$pop_natl_ref, na.rm = TRUE))
+  # Compare each LP's pop against ITS OWN pop_natl_ref (the year-specific WPP
+  # total for the year that LP's population was actually assigned), not a
+  # single corpus-wide scalar. A country's true national total grows across a
+  # multi-year extraction window (e.g. 2010-2024), so comparing every LP to
+  # one fixed reference year produces false positives on any LP assigned a
+  # later year, purely from population growth, not a defect. Caught on BDI's
+  # country-level LP: pop=12,404,228 (year 2020) was flagged against the
+  # corpus-wide median reference (11,506,762, pulled down by earlier-year
+  # LPs), while its own year's true national total was 12,617,036 -- pop was
+  # correctly below its own reference; there was no real violation.
+  # When the caller supplies `wpp_total` explicitly, honor it as a single
+  # fixed comparison value instead (their deliberate choice, applied to every
+  # LP uniformly).
+  if (!is.null(wpp_total) && is.finite(wpp_total) && wpp_total > 0) {
+    ref6      <- rep(wpp_total, nrow(lp))
+    ref6_desc <- format(round(wpp_total), big.mark = ",")
+  } else if (has("pop_natl_ref")) {
+    ref6      <- lp$pop_natl_ref
+    ref6_desc <- "each LP's own year-specific national total"
+  } else {
+    ref6 <- NULL
   }
-  if (!is.null(natl) && is.finite(natl) && natl > 0) {
-    g6 <- lp$location_period_id[!is.na(lp$pop) & lp$pop > natl]
-    add_gate(6L, sprintf("no location period exceeds the national total (%s)",
-                         format(round(natl), big.mark = ",")),
-             g6, nrow(lp))
+
+  if (!is.null(ref6)) {
+    checked6 <- !is.na(lp$pop) & !is.na(ref6) & is.finite(ref6) & ref6 > 0
+    g6 <- lp$location_period_id[checked6 & lp$pop > ref6]
+    add_gate(6L, sprintf("no location period exceeds the national total (%s)", ref6_desc),
+             g6, sum(checked6))
   }
 
   # -- Gate 7: country total within 30% of WPP (record only) -----------------
   # Record-only: the frame covers surveilled areas, not the whole country, so a
-  # shortfall is expected and is not by itself evidence of a defect.
+  # shortfall is expected and is not by itself evidence of a defect. This is a
+  # corpus-wide aggregate check, so (unlike gate 6) a single reference value is
+  # the right comparison basis -- median pop_natl_ref across the LPs actually
+  # summed, or the caller-supplied wpp_total.
+  natl <- wpp_total
+  if (is.null(natl) && has("pop_natl_ref")) {
+    natl <- suppressWarnings(stats::median(lp$pop_natl_ref, na.rm = TRUE))
+  }
   if (!is.null(natl) && is.finite(natl) && natl > 0) {
     observed <- sum(lp$pop, na.rm = TRUE)
     ratio    <- observed / natl

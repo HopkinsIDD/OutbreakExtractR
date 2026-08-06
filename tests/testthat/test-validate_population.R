@@ -105,6 +105,40 @@ testthat::test_that("gate 6 falls back to the median pop_natl_ref when wpp_total
   testthat::expect_equal(gate_row(qc, 6L)$n_violations, 1L)
 })
 
+testthat::test_that("gate 6 compares each LP to its own pop_natl_ref, not a corpus-wide median", {
+  # Regression test for the BDI smoke-test finding: a country's national
+  # total grows over a multi-year extraction window, so an LP assigned a
+  # later year (higher pop_natl_ref) must not be flagged against an earlier
+  # year's median just because other LPs in the same country were assigned
+  # earlier years. Three LPs simulate three assignment years with growing
+  # national totals; the fourth LP's pop is deliberately just below its OWN
+  # year's reference but above the median of the other three -- the old
+  # median-based gate 6 would have false-positived on it.
+  lp <- clean_lp()
+  lp$pop_natl_ref <- c(10000, 11000, 12000, 12600)
+  lp$pop          <- c(1000, 2000, 3000, 12400)   # LP 4: below its own ref (12600)...
+  # ...but above median(pop_natl_ref) = 11500, which the old implementation
+  # used as a single scalar for every row.
+  testthat::expect_silent(qc <- validate_population(lp, "ZZZ"))
+
+  g6 <- gate_row(qc, 6L)
+  testthat::expect_true(g6$passed)
+  testthat::expect_equal(g6$n_violations, 0L)
+  testthat::expect_match(g6$description, "own year-specific")
+})
+
+testthat::test_that("gate 6 still fires when an LP exceeds its OWN pop_natl_ref", {
+  lp <- clean_lp()
+  lp$pop_natl_ref <- c(10000, 11000, 12000, 12600)
+  lp$pop          <- c(1000, 2000, 3000, 13000)   # LP 4: above its own ref (12600)
+  testthat::expect_warning(qc <- validate_population(lp, "ZZZ"), "gate 6")
+
+  g6 <- gate_row(qc, 6L)
+  testthat::expect_false(g6$passed)
+  testthat::expect_equal(g6$n_violations, 1L)
+  testthat::expect_equal(g6$detail, "4")
+})
+
 testthat::test_that("gates 7 and 8 are record-only and never fail the run", {
   lp <- clean_lp()          # sum = 10000 vs national 10000 -> ratio 1.0
   lp$pop <- c(10, 10, 10, 10)
