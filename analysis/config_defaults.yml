@@ -51,6 +51,10 @@ outbreak_start_definition: "consecutive"
 min_weeks_above: 2
 require_increasing_trend: false
 tail_period: 6
+# When true, retain every location's full time series (outbreak_number = 0,
+# Time Period = "non-outbreak period") instead of dropping locations with no
+# detected outbreak.
+keep_nonoutbreak_locations: true
 
 # --- dual_window params (ignored when outbreak_start_definition == "consecutive") ---
 window_weeks: 3
