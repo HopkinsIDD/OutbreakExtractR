@@ -63,10 +63,17 @@ get_outbreak_threshold <- function (
 
       }
       
-      surveillance_data_threshold <- surveillance_data_threshold %>% 
-      ungroup() %>% 
+      surveillance_data_threshold <- surveillance_data_threshold %>%
+      ungroup() %>%
         mutate(
-          risk = ifelse(sCh/pop >= threshold & sCh>0, "high","low")
+          # When pop or threshold is NA (population lookup failed for this
+          # location), incidence cannot be computed — treat as "low" risk rather
+          # than propagating NA, which crashes downstream if() conditions.
+          risk = dplyr::case_when(
+            is.na(pop) | is.na(threshold) ~ "low",
+            sCh / pop >= threshold & sCh > 0 ~ "high",
+            TRUE ~ "low"
+          )
         )
       
       return(surveillance_data_threshold)

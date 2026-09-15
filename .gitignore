@@ -1,0 +1,14 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# R check artifacts
+*.Rcheck/
+
+# Generated analysis outputs — large binaries, not source
+analysis/generated_data/
+analysis/worldpop/
+
+# SLURM logs
+logs/

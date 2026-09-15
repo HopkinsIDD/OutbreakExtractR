@@ -5,14 +5,16 @@
 #' @description Fill in weekly zeroes for sCh if no reporting between min(TL)- 8 weeks and max(TL)+ 8 weeks for that location
 #' @param original_data dataframe with location, epiweek, TL, TR, sCh, cCh, deaths
 fill_phantom_zeroes <- function(original_data){
-	
-	if(length(unique(original_data$start_weekday))!=1){
-		error("All observations should have the same start_weekday. Please run set_uniform_wday_start on this dataset.")
+
+	if (nrow(original_data) == 0) return(original_data)
+
+	if(length(unique(na.omit(original_data$start_weekday))) > 1){
+		stop("All observations should have the same start_weekday. Please run set_uniform_wday_start on this dataset.")
 	} else if(nrow(dplyr::distinct(original_data, location, TL) %>%
 				dplyr::group_by(location, TL) %>%
 				dplyr::add_count() %>%
 				dplyr::filter(n>1)) > 1){
-		error("There are overlapping weekly observations. Please run_average_duplicate_observations on this dataset.")
+		stop("There are overlapping weekly observations. Please run_average_duplicate_observations on this dataset.")
 	}
 
 	tmp_function <- function(df_original, loc){         

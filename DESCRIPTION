@@ -7,10 +7,40 @@ Description: This package
 License: GLP-2
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
-Suggests: 
-    testthat (>= 3.0.0)
+Imports:
+    DBI,
+    RPostgres,
+    glue,
+    sf,
+    dplyr,
+    purrr,
+    tidyr,
+    stringr,
+    tibble,
+    lubridate,
+    zoo,
+    tidyselect,
+    rlang,
+    magrittr,
+    slider,
+    curl,
+    raster,
+    exactextractr
+Suggests:
+    testthat (>= 3.0.0),
+    sfarrow,
+    arrow,
+    yaml,
+    optparse,
+    furrr,
+    future,
+    here,
+    taxdat,
+    rgeoboundaries,
+    digest,
+    withr
 Config/testthat/edition: 3
-Depends: 
+Depends:
     R (>= 2.10)
 LazyData: true
+Config/roxygen2/version: 8.1.0
