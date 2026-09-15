@@ -6,13 +6,34 @@
 \usage{
 get_shp(
   location_period_id,
-  username = username,
-  password = password,
+  username,
+  password,
   host = "db.cholera-taxonomy.middle-distance.com",
   port = 5432,
-  dbname = "CholeraTaxonomy_production"
+  dbname = "CholeraTaxonomy_production",
+  output_parquet = NULL
 )
 }
+\arguments{
+\item{location_period_id}{numeric: the location period ID to retrieve}
+
+\item{username}{character: PostgreSQL username}
+
+\item{password}{character: PostgreSQL password}
+
+\item{host}{character: database host}
+
+\item{port}{integer: database port}
+
+\item{dbname}{character: database name}
+
+\item{output_parquet}{character: optional file path to save result as
+GeoParquet (requires sfarrow package). If NULL, no file is written.}
+}
+\value{
+sf object with the shapefile geometry
+}
 \description{
-this function is to extract shapefiles from
+this function is to extract shapefiles from the Cholera Taxonomy
+database. Optionally saves the result as a GeoParquet file.
 }

@@ -6,9 +6,6 @@
 \usage{
 format_alerts(alerts_df)
 }
-\arguments{
-\item{alerts_df}{}
-}
 \value{
 a 'long' version of the alerts dataframe with columns for the alert_id, location, TL, spatial scale, country, alert number (numeric), and alert type
 }

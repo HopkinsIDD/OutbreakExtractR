@@ -40,7 +40,7 @@ identify_epidemic_start <- function(
         }
       } else {
          for (idx in 1:(nrow(outbreak_data_with_epistart)-min_weeks_above+1)) {
-           if(all(outbreak_data_with_epistart$risk[idx:(idx+min_weeks_above-1)] == "high")){
+           if(isTRUE(all(outbreak_data_with_epistart$risk[idx:(idx+min_weeks_above-1)] == "high"))){
              outbreak_data_with_epistart$epidemic_start[idx] = TRUE
            }
         }

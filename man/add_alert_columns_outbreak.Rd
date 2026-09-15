@@ -6,11 +6,6 @@
 \usage{
 add_alert_columns_outbreak(basedf, alertdf)
 }
-\arguments{
-\item{basedf}{}
-
-\item{alertdf}{}
-}
 \value{
 dataframe
 }

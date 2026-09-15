@@ -6,9 +6,6 @@
 \usage{
 add_country_column(basedf)
 }
-\arguments{
-\item{basedf}{}
-}
 \value{
 dataframe
 }

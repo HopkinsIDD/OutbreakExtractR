@@ -1,29 +1,70 @@
 # Helper function
-#' Download country-specific constrained world pop 100*100m raster (2015-2030) from the worldpop data repo: 
-#' @param country country iso code
-#' @param year the year of the population raster
-#' @param dest_dir folder name where the downloaded population raster will be saved
-download_worldpop_constrained <- function(country, year, dest_dir = "worldpop") {
-  if (!dir.exists(dest_dir)) dir.create(dest_dir)
-  
-  out_file <- file.path(
-    dest_dir,
-    paste0(tolower(country), "_pop_", year, "_CN_100m_R2025A_v1.tif")
-  )
-  
-  if (file.exists(out_file)) return(out_file)
-  
-  url <- paste0(
-    "https://data.worldpop.org/GIS/Population/Global_2015_2030/",
-    "R2025A/", year, "/", country,
-    "/v1/100m/constrained/",
-    tolower(country), "_pop_", year, "_CN_100m_R2025A_v1.tif"
-  )
-  
-  message("Downloading WorldPop constrained raster: ", url)
-  curl::curl_download(url, out_file)
-  
-  return(out_file)
+#' Download country-specific constrained WorldPop 100m raster (2015-2030).
+#'
+#' Tries releases in order (newest first): R2025A → R2024B. After each
+#' download, reads one cell to verify the file is intact. Both releases use
+#' standard LZW+PREDICTOR=2 compression readable by any GDAL version; the
+#' fallback exists to handle interrupted or corrupted downloads (a partial
+#' LZW stream produces "code not yet in table" / TIFFReadEncodedTile errors
+#' indistinguishable from a codec problem). If R2025A is corrupt, its cached
+#' file is deleted and R2024B is fetched fresh.
+#'
+#' @param country  Country ISO3 code (upper-case).
+#' @param year     Population year (integer, 2015-2030).
+#' @param dest_dir Directory for cached raster files. Created if absent.
+#' @param releases Character vector of WorldPop release tags to try, in order.
+download_worldpop_constrained <- function(country, year, dest_dir = "worldpop",
+                                          releases = c("R2025A", "R2024B")) {
+  if (!dir.exists(dest_dir)) dir.create(dest_dir, recursive = TRUE)
+
+  for (release in releases) {
+    out_file <- file.path(
+      dest_dir,
+      paste0(tolower(country), "_pop_", year, "_CN_100m_", release, "_v1.tif")
+    )
+
+    if (!file.exists(out_file)) {
+      url <- paste0(
+        "https://data.worldpop.org/GIS/Population/Global_2015_2030/",
+        release, "/", year, "/", country,
+        "/v1/100m/constrained/",
+        tolower(country), "_pop_", year, "_CN_100m_", release, "_v1.tif"
+      )
+      message("Downloading WorldPop (", release, "): ", url)
+      dl_ok <- tryCatch({
+        curl::curl_download(url, out_file)
+        TRUE
+      }, error = function(e) {
+        message("  Download failed: ", conditionMessage(e))
+        file.remove(out_file)   # no-op (returns FALSE) if partial write did not occur
+        FALSE
+      })
+      if (!dl_ok) next
+    } else {
+      message("Using cached WorldPop raster (", release, "): ", basename(out_file))
+    }
+
+    # Verify the raster is actually intact after download.
+    # Both releases use LZW+PREDICTOR=2 (universally supported), but a
+    # partial/interrupted download produces a truncated LZW stream that
+    # causes "code not yet in table" / TIFFReadEncodedTile failures at read
+    # time. Reading one block is the earliest point these errors surface.
+    readable <- tryCatch({
+      r <- raster::raster(out_file)
+      suppressWarnings(raster::getValuesBlock(r, 1L, 1L, 1L, 1L))
+      TRUE
+    }, error = function(e) {
+      message("  Raster unreadable (corrupted download?): ",
+              conditionMessage(e),
+              "\n  Removing cached file and trying next release.")
+      file.remove(out_file)
+      FALSE
+    })
+    if (readable) return(out_file)
+  }
+
+  stop("All WorldPop releases failed for ", country, " year ", year,
+       ". Tried: ", paste(releases, collapse = ", "))
 }
 
 #' Estimate Adjustment Factors for Population Data (for years >=2021, use the adjustment factors at 2020 instead)

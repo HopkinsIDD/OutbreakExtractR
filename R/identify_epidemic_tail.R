@@ -16,7 +16,7 @@ identify_epidemic_tail <- function (
 
   tail_position <- rle(tail_vector)
 
-  if(any(tail_position$lengths[tail_position$values==1] >= tail_period)){
+  if(isTRUE(any(tail_position$lengths[tail_position$values==1] >= tail_period))){
     tail_position_table <- data.frame(
       values = tail_position$values,
       lengths = tail_position$lengths,
