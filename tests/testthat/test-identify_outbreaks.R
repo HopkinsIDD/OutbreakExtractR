@@ -150,3 +150,85 @@ test_that("keep_nonoutbreak_locations = TRUE does not affect a location that doe
   expect_equal(out_default[["OutbreakCountry"]], out_keep[["OutbreakCountry"]])
   expect_true(any(out_keep[["OutbreakCountry"]]$outbreak_number > 0))
 })
+
+# ---------------------------------------------------------------------------
+# identify_outbreaks(): exclude_closing_tail
+# ---------------------------------------------------------------------------
+
+# Weekly series with pop = 1 under the mean-weekly-incidence threshold: weeks
+# of 100 cases are "high", zero weeks are "low". tail_period = 6.
+make_tail_series <- function(sCh, location = "TailCountry") {
+  tl <- as.Date("2014-01-06") + 7L * seq(0L, length(sCh) - 1L)
+  data.frame(location = location, TL = tl, TR = tl + 6L, sCh = sCh, pop = 1,
+             stringsAsFactors = FALSE)
+}
+
+run_tail_outbreaks <- function(df, exclude_closing_tail, cumulative_min_cases = NULL, ...) {
+  out <- identify_outbreaks(
+    threshold_type        = "mean weekly incidence rate",
+    original_data         = df,
+    zero_case_assumption  = TRUE,
+    outbreak_start_definition = "consecutive",
+    min_weeks_above       = 2,
+    window_weeks          = 3,
+    cumulative_windows    = 3,
+    cumulative_case_threshold_ratio = 1.5,
+    cumulative_trigger_type = "cumulative_case_threshold",
+    use_cumulative_trigger  = FALSE,
+    cumulative_min_cases    = cumulative_min_cases,
+    nonzero_windows         = NULL,
+    tail_period             = 6,
+    exclude_closing_tail    = exclude_closing_tail,
+    ...
+  )
+  out[[unique(df$location)]]
+}
+
+# Rows of each numbered outbreak, as a list ordered by first row.
+outbreak_rows <- function(loc_out) {
+  rows <- split(seq_len(nrow(loc_out)), loc_out$outbreak_number)
+  rows <- rows[names(rows) != "0"]
+  unname(rows[order(vapply(rows, min, numeric(1)))])
+}
+
+test_that("a closed outbreak ends before its closing run only when exclude_closing_tail = TRUE", {
+  # rows 4-7 high, then 8 low weeks (closing run starts at row 8)
+  df <- make_tail_series(c(0, 0, 0, 100, 100, 100, 100, rep(0, 8)))
+  expect_equal(outbreak_rows(run_tail_outbreaks(df, FALSE)), list(4:13))
+  trimmed <- run_tail_outbreaks(df, TRUE)
+  expect_equal(outbreak_rows(trimmed), list(4:7))
+  expect_true(all(as.character(trimmed$`Time Period`[8:15]) == "non-outbreak period"))
+})
+
+test_that("exclude_closing_tail trims every outbreak separated by a closing run", {
+  # outbreaks at rows 3-5 and 13-15, each followed by 7 low weeks
+  df <- make_tail_series(c(0, 0, 100, 100, 100, rep(0, 7), 100, 100, 100, rep(0, 7)))
+  expect_equal(outbreak_rows(run_tail_outbreaks(df, FALSE)), list(3:11, 13:21))
+  expect_equal(outbreak_rows(run_tail_outbreaks(df, TRUE)), list(3:5, 13:15))
+})
+
+test_that("starts not separated by a closing run stay one outbreak under exclude_closing_tail", {
+  # highs at rows 3-5 and 9-11 with only 3 low weeks between them
+  df <- make_tail_series(c(0, 0, 100, 100, 100, 0, 0, 0, 100, 100, 100, rep(0, 7)))
+  expect_equal(outbreak_rows(run_tail_outbreaks(df, FALSE)), list(3:17))
+  expect_equal(outbreak_rows(run_tail_outbreaks(df, TRUE)), list(3:11))
+})
+
+test_that("an outbreak with no full closing run runs to the series end either way", {
+  # only 3 low weeks after the last high week: no closing run
+  df <- make_tail_series(c(0, 0, 0, 100, 100, 100, 100, 0, 0, 0))
+  expect_equal(outbreak_rows(run_tail_outbreaks(df, FALSE)), list(4:10))
+  expect_equal(outbreak_rows(run_tail_outbreaks(df, TRUE)), list(4:10))
+})
+
+test_that("the size filter counts only the trimmed window when exclude_closing_tail = TRUE", {
+  # 2 high weeks (40 cases) then 6 low weeks of 2 cases (12 cases) in the
+  # closing run: 52 cases with the closing run, 40 without it.
+  df <- make_tail_series(c(rep(0, 10), 20, 20, rep(2, 6), rep(0, 6)))
+  keep <- run_tail_outbreaks(df, FALSE, cumulative_min_cases = 50,
+                             filter_outbreaks_by_size = TRUE)
+  expect_equal(outbreak_rows(keep), list(11:18))
+  drop <- run_tail_outbreaks(df, TRUE, cumulative_min_cases = 50,
+                             filter_outbreaks_by_size = TRUE)
+  expect_true(all(drop$outbreak_number == 0))
+})

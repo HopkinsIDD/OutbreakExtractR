@@ -114,7 +114,7 @@ testthat::test_that("build_composite_locations uses WorldPop-on-geometry pop whe
   # Offline: mock the raster extraction to return a fixed sub-area denominator.
   testthat::local_mocked_bindings(
     estimate_pop_for_geometries = function(geom_sf, country_iso3, year,
-                                           raster_dir = "worldpop") {
+                                           raster_dir = "worldpop", ...) {
       rep(5555, nrow(geom_sf))
     }
   )
@@ -151,7 +151,7 @@ testthat::test_that("build_composite_locations keeps summed-child pop when geome
 
   testthat::local_mocked_bindings(
     estimate_pop_for_geometries = function(geom_sf, country_iso3, year,
-                                           raster_dir = "worldpop") {
+                                           raster_dir = "worldpop", ...) {
       rep(NA_real_, nrow(geom_sf))
     }
   )

@@ -43,7 +43,8 @@ observation_aggregator <- function (
       TR = min(TL)+6,
       sCh = sum(sCh, na.rm = T),
       deaths = sum(deaths, na.rm = T),
-      cCh = sum(cCh, na.rm = T),
+      # NA when no day of the week reports confirmed cases, not 0
+      cCh = if (all(is.na(cCh))) NA_real_ else sum(cCh, na.rm = T),
       days = dplyr::n(),
       original_location_name = custom_paste(original_location_name),
       observation_collection_id = custom_paste(observation_collection_id)

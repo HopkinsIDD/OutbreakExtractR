@@ -51,6 +51,10 @@ outbreak_start_definition: "consecutive"
 min_weeks_above: 2
 require_increasing_trend: false
 tail_period: 6
+# When true, an outbreak ends at the last week before its closing run of
+# tail_period below-threshold weeks; the closing run is not part of the
+# outbreak. When false (or absent), the outbreak runs through the closing run.
+exclude_closing_tail: true
 # When true, retain every location's full time series (outbreak_number = 0,
 # Time Period = "non-outbreak period") instead of dropping locations with no
 # detected outbreak.
@@ -76,6 +80,10 @@ filter_outbreaks_by_size: true
 # Downloaded automatically by add_population() on first use; reused on subsequent runs.
 # Relative paths are resolved from the project root (here::here()).
 raster_dir: "analysis/worldpop"
+# Directory caching national (adm0) boundaries from geoBoundaries, used for the
+# UN-WPP population adjustment. Relative paths resolve from the project root.
+# Populate it on a machine with network access before running on compute nodes.
+boundary_cache_dir: "analysis/country_boundaries"
 
 # --- Job metadata ---
 set_name: "default"

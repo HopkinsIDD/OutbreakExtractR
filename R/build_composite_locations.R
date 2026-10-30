@@ -157,6 +157,9 @@ get_composite_parent <- function(composite_name) {
 #' @param allow_parent_pop_fallback logical: when TRUE, a composite whose
 #'   population cannot be established from its own children may inherit its
 #'   parent location's population. Defaults to FALSE.
+#' @param boundary_cache_dir character or NULL: directory caching national
+#'   boundaries for the UN adjustment, passed to
+#'   \code{estimate_pop_for_geometries()}.
 #'
 #'   The parent of a composite is a strictly larger area, so inheriting its
 #'   population overstates the denominator by however much of the parent the
@@ -191,7 +194,8 @@ get_composite_parent <- function(composite_name) {
 #'                         or NULL when there are none).
 build_composite_locations <- function(normalized, raw_sf, iso3,
                                        raster_dir = NULL,
-                                       allow_parent_pop_fallback = FALSE) {
+                                       allow_parent_pop_fallback = FALSE,
+                                       boundary_cache_dir = "country_boundaries") {
 
   iso3 <- toupper(regmatches(iso3, regexpr("[A-Z]{3}", iso3)))
 
@@ -391,7 +395,8 @@ build_composite_locations <- function(normalized, raw_sf, iso3,
         geom_sf      = composite_geom,
         country_iso3 = iso3,
         year         = geom_years$year,
-        raster_dir   = raster_dir
+        raster_dir   = raster_dir,
+        boundary_cache_dir = boundary_cache_dir
       ),
       error = function(e) {
         message("  build_composite_locations(): geometry-derived pop failed (",

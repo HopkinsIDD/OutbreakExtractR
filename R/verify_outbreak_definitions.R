@@ -489,9 +489,10 @@ verify_outbreak_definitions <- function(
             rle_res       <- rle(non_ob_low)
             n_leading_low <- if (rle_res$values[1]) rle_res$lengths[1] else 0L
 
-            # The algorithm places ~2 tail rows inside the outbreak period;
-            # expect at least tail_period - 2 consecutive non-outbreak low-risk
-            # weeks immediately after.
+            # With exclude_closing_tail = TRUE the whole closing run
+            # (tail_period weeks) follows the outbreak; with FALSE it is inside
+            # the outbreak and the weeks after need not be low. The check
+            # keeps a lenient floor of tail_period - 2 weeks.
             min_expected <- max(0L, tail_period - 2L)
             push(make_row(loc, ob_id, "tail_period_after_outbreak",
               if (n_leading_low >= min_expected) "PASS" else "FAIL",

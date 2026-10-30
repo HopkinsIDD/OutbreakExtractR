@@ -22,7 +22,8 @@ identify_outbreaks(
   nonzero_windows = nonzero_windows,
   tail_period = 6,
   filter_outbreaks_by_size = FALSE,
-  keep_nonoutbreak_locations = FALSE
+  keep_nonoutbreak_locations = FALSE,
+  exclude_closing_tail = FALSE
 )
 }
 \arguments{
@@ -43,6 +44,8 @@ identify_outbreaks(
 \item{filter_outbreaks_by_size:}{logical: when TRUE, drop detected outbreaks whose total cases (summed over the full outbreak window) fall below \code{cumulative_min_cases}. Default FALSE (no filtering, backward compatible).}
 
 \item{keep_nonoutbreak_locations:}{logical: when TRUE, locations that never trigger an epidemic start are returned as their full time series labelled \code{outbreak_number = 0} and \code{`Time Period` = "non-outbreak period"}, instead of an empty data.frame. Use this to retain every location in the output rather than silently dropping those without a detected outbreak. Default FALSE (backward compatible).}
+
+\item{exclude_closing_tail:}{logical: when TRUE, an outbreak closed by a run of \code{tail_period} below-threshold weeks ends at the last week before that run, so the closing run is not part of the outbreak (and does not count towards the size filter). When FALSE, the outbreak runs through the end of the closing run. An outbreak with no closing run (it reaches the end of the series) runs to the series end either way. Default FALSE (backward compatible).}
 }
 \value{
 list of dataframes

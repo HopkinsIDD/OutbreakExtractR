@@ -22,6 +22,8 @@ outbreak_start_definition: consecutive
 min_weeks_above: 2
 require_increasing_trend: no
 tail_period: 6
+exclude_closing_tail: yes
+keep_nonoutbreak_locations: yes
 window_weeks: 3
 use_cumulative_trigger: yes
 cumulative_trigger_type: cumulative_case_threshold_and_min_cases
@@ -31,6 +33,7 @@ cumulative_min_cases: 50
 nonzero_windows: ~
 filter_outbreaks_by_size: yes
 raster_dir: analysis/worldpop
+boundary_cache_dir: analysis/country_boundaries
 set_name: default
 output_dir: analysis/generated_data
 use_geoparquet: no

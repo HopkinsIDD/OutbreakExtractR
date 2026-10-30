@@ -9,6 +9,7 @@
 # Generated analysis outputs — large binaries, not source
 analysis/generated_data/
 analysis/worldpop/
+analysis/country_boundaries/
 
 # SLURM logs
 logs/

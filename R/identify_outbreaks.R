@@ -15,6 +15,17 @@ filter_small_outbreaks <- function(df, min_total_cases) {
   df
 }
 
+# Internal helper (not exported): last row of an outbreak closed by a run of
+# tail_period below-threshold weeks whose first row is first_tail_idx. The
+# closing run is part of the outbreak unless exclude_closing_tail is TRUE.
+closing_tail_end_idx <- function(first_tail_idx, tail_period, exclude_closing_tail) {
+  if (isTRUE(exclude_closing_tail)) {
+    first_tail_idx - 1
+  } else {
+    first_tail_idx + tail_period - 1
+  }
+}
+
 #' @title identify_outbreaks
 
 #' @param threahold_type: character: 1. fixed threshold: a fixed value as outbreak threshold. 2. mean weekly incidence: use the mean weekly incidence as the outbreak threshold. 3. outbreak_dependent threshold: use the mean weekly cholera incidence for the first three weeks as the threshold for that outbreak
@@ -26,6 +37,7 @@ filter_small_outbreaks <- function(df, min_total_cases) {
 #' @param cumulative_min_cases: numeric: minimum cumulative cases. Used by the dual_window cumulative trigger and, when \code{filter_outbreaks_by_size = TRUE}, as the minimum total-case threshold for the post-detection size filter.
 #' @param filter_outbreaks_by_size: logical: when TRUE, drop detected outbreaks whose total cases (summed over the full outbreak window) fall below \code{cumulative_min_cases}. Default FALSE (no filtering, backward compatible).
 #' @param keep_nonoutbreak_locations: logical: when TRUE, locations that never trigger an epidemic start are returned as their full time series labelled \code{outbreak_number = 0} and \code{`Time Period` = "non-outbreak period"}, instead of an empty data.frame. Use this to retain every location in the output rather than silently dropping those without a detected outbreak. Default FALSE (backward compatible).
+#' @param exclude_closing_tail: logical: when TRUE, an outbreak closed by a run of \code{tail_period} below-threshold weeks ends at the last week before that run, so the closing run is not part of the outbreak (and does not count towards the size filter). When FALSE, the outbreak runs through the end of the closing run. An outbreak with no closing run (it reaches the end of the series) runs to the series end either way. Default FALSE (backward compatible).
 #' @export
 #' @return list of dataframes
 
@@ -47,7 +59,8 @@ identify_outbreaks <- function(
     nonzero_windows = nonzero_windows,
     tail_period =6,
     filter_outbreaks_by_size = FALSE,
-    keep_nonoutbreak_locations = FALSE
+    keep_nonoutbreak_locations = FALSE,
+    exclude_closing_tail = FALSE
     ){
 
   # Identify cholera outbreak thresholds
@@ -95,8 +108,9 @@ identify_outbreaks <- function(
           data_between_epidemic_start = preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:epidemic_start_row_idx[idx+1],]
           if(any(data_between_epidemic_start$epidemic_tail) & nrow(data_between_epidemic_start)>=tail_period+2){
             outbreak_end = min(as.numeric(data_between_epidemic_start[data_between_epidemic_start$epidemic_tail,]$row_idx))
-            preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:as.numeric(as.numeric(outbreak_end)+tail_period-1),]$outbreak_number =
-              min(outbreak_number_idx,preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:as.numeric(as.numeric(outbreak_end)+tail_period-1),]$outbreak_number[preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:as.numeric(as.numeric(outbreak_end)+tail_period-1),]$outbreak_number>0])
+            end_idx = closing_tail_end_idx(outbreak_end, tail_period, exclude_closing_tail)
+            preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:end_idx,]$outbreak_number =
+              min(outbreak_number_idx,preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:end_idx,]$outbreak_number[preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:end_idx,]$outbreak_number>0])
             outbreak_number_idx = outbreak_number_idx +1
           } else {
             preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:epidemic_start_row_idx[idx+1],]$outbreak_number = 
@@ -115,19 +129,20 @@ identify_outbreaks <- function(
         # to the end of the window), fall back to the last row index.
         if(any(after_last_epidemi_start$epidemic_tail)){
           last_outbreak_end_idx = min(as.numeric(after_last_epidemi_start[after_last_epidemi_start$epidemic_tail,]$row_idx))
+          end_idx = min(closing_tail_end_idx(last_outbreak_end_idx, tail_period, exclude_closing_tail),
+                        nrow(preoutbreak_by_location_start_end_washout))
         } else {
-          last_outbreak_end_idx = nrow(preoutbreak_by_location_start_end_washout)
+          end_idx = nrow(preoutbreak_by_location_start_end_washout)
         }
-        end_idx = min(as.numeric(last_outbreak_end_idx) + tail_period - 1,
-                      nrow(preoutbreak_by_location_start_end_washout))
         preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:end_idx,]$outbreak_number = last_epidemic_start$outbreak_number
       } else {
         #there's only one outbreak start (one potential outbreak)
         data_between_epidemic_start = preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:nrow(preoutbreak_by_location_start_end_washout),]
         if(any(data_between_epidemic_start$epidemic_tail)){
           outbreak_end = min(as.numeric(data_between_epidemic_start[data_between_epidemic_start$epidemic_tail,]$row_idx))
-          preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:as.numeric(as.numeric(outbreak_end)+tail_period-1),]$outbreak_number =
-            min(outbreak_number_idx,preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:as.numeric(as.numeric(outbreak_end)+tail_period-1),]$outbreak_number[preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:as.numeric(as.numeric(outbreak_end)+tail_period-1),]$outbreak_number>0])
+          end_idx = closing_tail_end_idx(outbreak_end, tail_period, exclude_closing_tail)
+          preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:end_idx,]$outbreak_number =
+            min(outbreak_number_idx,preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:end_idx,]$outbreak_number[preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:end_idx,]$outbreak_number>0])
           outbreak_number_idx = outbreak_number_idx +1
         }
       }

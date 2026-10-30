@@ -9,7 +9,8 @@ build_composite_locations(
   raw_sf,
   iso3,
   raster_dir = NULL,
-  allow_parent_pop_fallback = FALSE
+  allow_parent_pop_fallback = FALSE,
+  boundary_cache_dir = "country_boundaries"
 )
 }
 \arguments{
@@ -28,7 +29,11 @@ composite geometry via \code{estimate_pop_for_geometries()}.}
 
 \item{allow_parent_pop_fallback}{logical: when TRUE, a composite whose
 population cannot be established from its own children may inherit its
-parent location's population. Defaults to FALSE.
+parent location's population. Defaults to FALSE.}
+
+\item{boundary_cache_dir}{character or NULL: directory caching national
+boundaries for the UN adjustment, passed to
+\code{estimate_pop_for_geometries()}.
 
 The parent of a composite is a strictly larger area, so inheriting its
 population overstates the denominator by however much of the parent the

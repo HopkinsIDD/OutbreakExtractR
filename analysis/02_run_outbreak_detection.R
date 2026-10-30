@@ -220,13 +220,21 @@ if (nrow(normalized) == 0) {
   quit(status = 0)
 }
 
+# National boundaries for the UN population adjustment. Fetched from
+# geoBoundaries on first use and cached here; compute nodes without network
+# need the cache pre-populated, or population is silently left unadjusted.
+boundary_cache_dir <- here::here(
+  if (is.null(opt$boundary_cache_dir)) "analysis/country_boundaries" else opt$boundary_cache_dir
+)
+
 # Population attachment (WorldPop, keyed by location_period_id + geometry from geo files)
 if (!is.null(raw_sf)) {
   normalized <- OutbreakExtractR::add_population(
-    normalized_data = normalized,
-    raw_sf          = raw_sf,
-    country_iso3    = opt$country_iso3,
-    raster_dir      = here::here(opt$raster_dir)
+    normalized_data    = normalized,
+    raw_sf             = raw_sf,
+    country_iso3       = opt$country_iso3,
+    raster_dir         = here::here(opt$raster_dir),
+    boundary_cache_dir = boundary_cache_dir
   )
 } else {
   normalized$pop <- NA_real_
@@ -247,7 +255,8 @@ if (!is.null(raw_sf)) {
       normalized = normalized,
       raw_sf     = raw_sf,
       iso3       = opt$country_iso3,
-      raster_dir = here::here(opt$raster_dir)
+      raster_dir = here::here(opt$raster_dir),
+      boundary_cache_dir = boundary_cache_dir
     ),
     error = function(e) {
       warning("build_composite_locations() failed for ",
@@ -314,7 +323,8 @@ outbreak_list <- tryCatch(
     nonzero_windows                 = opt$nonzero_windows,
     tail_period                     = opt$tail_period,
     filter_outbreaks_by_size        = isTRUE(opt$filter_outbreaks_by_size),
-    keep_nonoutbreak_locations      = isTRUE(opt$keep_nonoutbreak_locations)
+    keep_nonoutbreak_locations      = isTRUE(opt$keep_nonoutbreak_locations),
+    exclude_closing_tail            = isTRUE(opt$exclude_closing_tail)
   ),
   error = function(e) {
     warning("identify_outbreaks() failed for ",
