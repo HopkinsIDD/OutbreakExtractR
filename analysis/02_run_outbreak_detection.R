@@ -165,62 +165,81 @@ message("Full time range: ", tl_all, " → ", tr_all)
 # Reference processing pipeline (matches Step2_Extract_outbreak.R:26-67)
 # ---------------------------------------------------------------------------
 
-# Daily branch: filter then aggregate to weekly
-daily_data <- OutbreakExtractR::observation_filter(
-  outbreak_data            = clean_all,
-  time_lower_bound_filter  = tl_all,
-  time_upper_bound_filter  = tr_all,
-  temporal_scale_filter    = "daily",
-  who_regions              = opt$who_region,
-  spatial_scale_filter     = opt$spatial_scale_filter,
-  remove_na_sCh            = opt$remove_na_sCh,
-  remove_na_cCh            = opt$remove_na_cCh,
-  remove_na_locationperiod = opt$remove_na_locationperiod,
-  minimum_daily_cases      = opt$minimum_daily_cases
-)
-if (nrow(daily_data) > 0) {
-  daily_data <- OutbreakExtractR::observation_aggregator(daily_data)
+# The whole chain works within one location (daily -> weekly aggregation,
+# LP filling, duplicate averaging, week-start alignment, singleton drop,
+# phantom zeros), so with n_workers > 1 it runs per location in parallel and
+# gives the same rows (in a different order) as the serial run.
+filter_scale <- function(d, scale) {
+  OutbreakExtractR::observation_filter(
+    outbreak_data            = d,
+    time_lower_bound_filter  = tl_all,
+    time_upper_bound_filter  = tr_all,
+    temporal_scale_filter    = scale,
+    who_regions              = opt$who_region,
+    spatial_scale_filter     = opt$spatial_scale_filter,
+    remove_na_sCh            = opt$remove_na_sCh,
+    remove_na_cCh            = opt$remove_na_cCh,
+    remove_na_locationperiod = opt$remove_na_locationperiod,
+    minimum_daily_cases      = opt$minimum_daily_cases
+  )
 }
 
-# Weekly branch: filter then coerce id columns to character (avoids bind_rows type conflicts)
-weekly_data <- OutbreakExtractR::observation_filter(
-  outbreak_data            = clean_all,
-  time_lower_bound_filter  = tl_all,
-  time_upper_bound_filter  = tr_all,
-  temporal_scale_filter    = "weekly",
-  who_regions              = opt$who_region,
-  spatial_scale_filter     = opt$spatial_scale_filter,
-  remove_na_sCh            = opt$remove_na_sCh,
-  remove_na_cCh            = opt$remove_na_cCh,
-  remove_na_locationperiod = opt$remove_na_locationperiod,
-  minimum_daily_cases      = opt$minimum_daily_cases
-) %>%
-  dplyr::mutate(
-    observation_collection_id = as.character(observation_collection_id),
-    dplyr::across(dplyr::any_of("original_location_name"), as.character)
-  )
+normalize_observations <- function(d) {
+  # Daily branch: filter then aggregate to weekly
+  daily_data <- filter_scale(d, "daily")
+  if (nrow(daily_data) > 0) {
+    daily_data <- OutbreakExtractR::observation_aggregator(daily_data)
+  }
 
-combined_filtered <- dplyr::bind_rows(weekly_data, daily_data)
+  # Weekly branch: filter then coerce id columns to character (avoids bind_rows type conflicts)
+  weekly_data <- filter_scale(d, "weekly") %>%
+    dplyr::mutate(
+      observation_collection_id = as.character(observation_collection_id),
+      dplyr::across(dplyr::any_of("original_location_name"), as.character)
+    )
 
-if (nrow(combined_filtered) == 0) {
+  combined_filtered <- dplyr::bind_rows(weekly_data, daily_data)
+  if (nrow(combined_filtered) == 0) return(combined_filtered)
+
+  # Normalization: fill_missing_lps (×3), dedup, wday alignment, singleton drop, phantom zeros
+  combined_filtered %>%
+    OutbreakExtractR::fill_missing_lps() %>%
+    OutbreakExtractR::average_duplicate_observations() %>%
+    OutbreakExtractR::fill_missing_lps() %>%
+    OutbreakExtractR::set_uniform_wday_start() %>%
+    dplyr::group_by(location) %>%
+    dplyr::add_count(name = "n_obs") %>%
+    dplyr::ungroup() %>%
+    dplyr::filter(n_obs > 1) %>%
+    dplyr::select(-n_obs) %>%
+    OutbreakExtractR::fill_phantom_zeroes() %>%
+    OutbreakExtractR::fill_missing_lps()
+}
+
+step_time(sprintf("normalization start (%d worker(s))", n_workers))
+if (n_workers > 1L) {
+  # One chunk per location, NA location kept as its own chunk
+  loc_chunks <- split(clean_all, factor(clean_all$location,
+                                        levels = unique(clean_all$location),
+                                        exclude = NULL))
+  future::plan(future::multisession, workers = n_workers)
+  normalized <- furrr::future_map(
+    loc_chunks, normalize_observations,
+    .options = furrr::furrr_options(packages = "dplyr", seed = NULL)
+  ) %>%
+    purrr::keep(\(x) nrow(x) > 0) %>%
+    dplyr::bind_rows()
+  future::plan(future::sequential)
+  rm(loc_chunks)
+} else {
+  normalized <- normalize_observations(clean_all)
+}
+
+if (nrow(normalized) == 0) {
   warning("No observations after filtering for: ", opt$who_region, "::", opt$country_iso3)
   write_tabular(data.frame(), out_file, opt$use_geoparquet)
   quit(status = 0)
 }
-
-# Normalization: fill_missing_lps (×3), dedup, wday alignment, singleton drop, phantom zeros
-normalized <- combined_filtered %>%
-  OutbreakExtractR::fill_missing_lps() %>%
-  OutbreakExtractR::average_duplicate_observations() %>%
-  OutbreakExtractR::fill_missing_lps() %>%
-  OutbreakExtractR::set_uniform_wday_start() %>%
-  dplyr::group_by(location) %>%
-  dplyr::add_count(name = "n_obs") %>%
-  dplyr::ungroup() %>%
-  dplyr::filter(n_obs > 1) %>%
-  dplyr::select(-n_obs) %>%
-  OutbreakExtractR::fill_phantom_zeroes() %>%
-  OutbreakExtractR::fill_missing_lps()
 
 step_time("normalization done")
 message("Normalized: ", nrow(normalized), " rows, ",
