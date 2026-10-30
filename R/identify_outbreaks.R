@@ -38,6 +38,7 @@ closing_tail_end_idx <- function(first_tail_idx, tail_period, exclude_closing_ta
 #' @param filter_outbreaks_by_size: logical: when TRUE, drop detected outbreaks whose total cases (summed over the full outbreak window) fall below \code{cumulative_min_cases}. Default FALSE (no filtering, backward compatible).
 #' @param keep_nonoutbreak_locations: logical: when TRUE, locations that never trigger an epidemic start are returned as their full time series labelled \code{outbreak_number = 0} and \code{`Time Period` = "non-outbreak period"}, instead of an empty data.frame. Use this to retain every location in the output rather than silently dropping those without a detected outbreak. Default FALSE (backward compatible).
 #' @param exclude_closing_tail: logical: when TRUE, an outbreak closed by a run of \code{tail_period} below-threshold weeks ends at the last week before that run, so the closing run is not part of the outbreak (and does not count towards the size filter). When FALSE, the outbreak runs through the end of the closing run. An outbreak with no closing run (it reaches the end of the series) runs to the series end either way. Default FALSE (backward compatible).
+#' @param n_workers: integer: number of parallel worker processes over locations (\code{furrr} multisession; each location is independent). Default 1 (serial). Results are identical either way.
 #' @export
 #' @return list of dataframes
 
@@ -60,7 +61,8 @@ identify_outbreaks <- function(
     tail_period =6,
     filter_outbreaks_by_size = FALSE,
     keep_nonoutbreak_locations = FALSE,
-    exclude_closing_tail = FALSE
+    exclude_closing_tail = FALSE,
+    n_workers = 1L
     ){
 
   # Identify cholera outbreak thresholds
@@ -71,117 +73,157 @@ identify_outbreaks <- function(
     customized_TL = customized_TL,
     customized_TR = customized_TR)
   
-  # Create an empty list to store outbreaks
-  outbreak_list <- vector(mode = 'list', length = length(unique(original_data_threshold$location)))
-  names(outbreak_list) <- unique(original_data_threshold$location)
-  list_idx <- 1
+  # One data frame per location, in order of first appearance
+  locations   <- unique(original_data_threshold$location)
+  by_location <- split(original_data_threshold,
+                       factor(original_data_threshold$location, levels = locations))
+  rm(original_data, original_data_threshold)
+
+  args <- list(
+    outbreak_start_definition = outbreak_start_definition,
+    min_weeks_above = min_weeks_above,
+    require_increasing_trend = require_increasing_trend,
+    tail_period = tail_period,
+    filter_outbreaks_by_size = filter_outbreaks_by_size,
+    keep_nonoutbreak_locations = keep_nonoutbreak_locations,
+    exclude_closing_tail = exclude_closing_tail)
+  # These default to themselves, so they can only be read when supplied;
+  # omitted ones fall back to outbreaks_for_location()'s defaults.
+  for (a in c("window_weeks", "cumulative_windows", "cumulative_case_threshold_ratio",
+              "cumulative_trigger_type", "use_cumulative_trigger",
+              "cumulative_min_cases", "nonzero_windows")) {
+    if (!eval(call("missing", as.name(a)))) args[a] <- list(get(a))
+  }
+
+  if (n_workers > 1L && length(by_location) > 1L) {
+    if (!requireNamespace("furrr", quietly = TRUE) ||
+        !requireNamespace("future", quietly = TRUE))
+      stop("identify_outbreaks(): n_workers > 1 needs the furrr and future packages.")
+    old_plan <- future::plan(future::multisession, workers = n_workers)
+    on.exit(future::plan(old_plan), add = TRUE)
+    outbreak_list <- do.call(furrr::future_map, c(
+      list(.x = by_location, .f = outbreaks_for_location,
+           .options = furrr::furrr_options(packages = "dplyr", seed = NULL)),
+      args))
+  } else {
+    outbreak_list <- do.call(lapply, c(list(X = by_location, FUN = outbreaks_for_location), args))
+  }
+
+  return(outbreak_list)
+}
+
+# Internal helper (not exported): outbreak numbering for one location's
+# thresholded weekly series. Every location is independent, so
+# identify_outbreaks() can map this over locations in parallel.
+outbreaks_for_location <- function(
+    preoutbreak_by_location,
+    outbreak_start_definition, min_weeks_above, require_increasing_trend,
+    tail_period, filter_outbreaks_by_size, keep_nonoutbreak_locations,
+    exclude_closing_tail,
+    window_weeks = 3, cumulative_windows = 3, cumulative_case_threshold_ratio = 1.5,
+    cumulative_trigger_type = "cumulative_case_threshold",
+    use_cumulative_trigger = TRUE, cumulative_min_cases = NULL,
+    nonzero_windows = NULL) {
   
-  for (loc_idx in unique(original_data_threshold$location)) {
-    
-    preoutbreak_by_location <- original_data_threshold %>% subset(location == loc_idx) %>% arrange(TL)
-    new_outbreak_by_location=data.frame()
-    
-    # extract outbreak start and end
-    preoutbreak_by_location_start<-OutbreakExtractR::identify_epidemic_start(outbreak_data = preoutbreak_by_location,
-                                                                             outbreak_start_definition = outbreak_start_definition, 
-                                                                             require_increasing_trend = require_increasing_trend,
-                                                                             min_weeks_above = min_weeks_above,
-                                                                             window_weeks = window_weeks,
-                                                                             use_cumulative_trigger=use_cumulative_trigger,
-                                                                             cumulative_trigger_type=cumulative_trigger_type,
-                                                                             cumulative_windows = cumulative_windows,
-                                                                             cumulative_case_threshold_ratio = cumulative_case_threshold_ratio,
-                                                                             cumulative_min_cases=cumulative_min_cases,
-                                                                             nonzero_windows = nonzero_windows)
-    preoutbreak_by_location_start_end_washout<-OutbreakExtractR::identify_epidemic_tail(outbreak_data = preoutbreak_by_location_start, tail_period = tail_period)
-    
-    # get the row idx for epidemic start
-    preoutbreak_by_location_start_end_washout$row_idx = rownames(preoutbreak_by_location_start_end_washout)
-    epidemic_start_row_idx = unique(preoutbreak_by_location_start_end_washout[preoutbreak_by_location_start_end_washout$epidemic_start,]$row_idx)
-    
-    if(length(epidemic_start_row_idx)>0){
-      preoutbreak_by_location_start_end_washout$outbreak_number = 0
-      outbreak_number_idx =1
-      if(length(epidemic_start_row_idx) > 1) {
-        for (idx in seq(length(epidemic_start_row_idx)-1)) {
-          
-          data_between_epidemic_start = preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:epidemic_start_row_idx[idx+1],]
-          if(any(data_between_epidemic_start$epidemic_tail) & nrow(data_between_epidemic_start)>=tail_period+2){
-            outbreak_end = min(as.numeric(data_between_epidemic_start[data_between_epidemic_start$epidemic_tail,]$row_idx))
-            end_idx = closing_tail_end_idx(outbreak_end, tail_period, exclude_closing_tail)
-            preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:end_idx,]$outbreak_number =
-              min(outbreak_number_idx,preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:end_idx,]$outbreak_number[preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:end_idx,]$outbreak_number>0])
-            outbreak_number_idx = outbreak_number_idx +1
-          } else {
-            preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:epidemic_start_row_idx[idx+1],]$outbreak_number = 
-              min(outbreak_number_idx,preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:epidemic_start_row_idx[idx+1],]$outbreak_number[preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:epidemic_start_row_idx[idx+1],]$outbreak_number>0])
-            outbreak_number_idx = outbreak_number_idx +1
-          }
-        }
-      }
-      
-      #for the last outbreak
-      last_epidemic_start = preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)],]
-      if(last_epidemic_start$outbreak_number>0){
-        final_outbreak_number = last_epidemic_start$outbreak_number
-        after_last_epidemi_start = preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:nrow(preoutbreak_by_location_start_end_washout),]
-        # Guard: if no epidemic_tail exists after the last start (outbreak extends
-        # to the end of the window), fall back to the last row index.
-        if(any(after_last_epidemi_start$epidemic_tail)){
-          last_outbreak_end_idx = min(as.numeric(after_last_epidemi_start[after_last_epidemi_start$epidemic_tail,]$row_idx))
-          end_idx = min(closing_tail_end_idx(last_outbreak_end_idx, tail_period, exclude_closing_tail),
-                        nrow(preoutbreak_by_location_start_end_washout))
-        } else {
-          end_idx = nrow(preoutbreak_by_location_start_end_washout)
-        }
-        preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:end_idx,]$outbreak_number = last_epidemic_start$outbreak_number
-      } else {
-        #there's only one outbreak start (one potential outbreak)
-        data_between_epidemic_start = preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:nrow(preoutbreak_by_location_start_end_washout),]
-        if(any(data_between_epidemic_start$epidemic_tail)){
+  preoutbreak_by_location <- preoutbreak_by_location %>% dplyr::arrange(TL)
+  
+  # extract outbreak start and end
+  preoutbreak_by_location_start<-OutbreakExtractR::identify_epidemic_start(outbreak_data = preoutbreak_by_location,
+                                                                           outbreak_start_definition = outbreak_start_definition, 
+                                                                           require_increasing_trend = require_increasing_trend,
+                                                                           min_weeks_above = min_weeks_above,
+                                                                           window_weeks = window_weeks,
+                                                                           use_cumulative_trigger=use_cumulative_trigger,
+                                                                           cumulative_trigger_type=cumulative_trigger_type,
+                                                                           cumulative_windows = cumulative_windows,
+                                                                           cumulative_case_threshold_ratio = cumulative_case_threshold_ratio,
+                                                                           cumulative_min_cases=cumulative_min_cases,
+                                                                           nonzero_windows = nonzero_windows)
+  preoutbreak_by_location_start_end_washout<-OutbreakExtractR::identify_epidemic_tail(outbreak_data = preoutbreak_by_location_start, tail_period = tail_period)
+  
+  # get the row idx for epidemic start
+  preoutbreak_by_location_start_end_washout$row_idx = rownames(preoutbreak_by_location_start_end_washout)
+  epidemic_start_row_idx = unique(preoutbreak_by_location_start_end_washout[preoutbreak_by_location_start_end_washout$epidemic_start,]$row_idx)
+  
+  if(length(epidemic_start_row_idx)>0){
+    preoutbreak_by_location_start_end_washout$outbreak_number = 0
+    outbreak_number_idx =1
+    if(length(epidemic_start_row_idx) > 1) {
+      for (idx in seq(length(epidemic_start_row_idx)-1)) {
+        
+        data_between_epidemic_start = preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:epidemic_start_row_idx[idx+1],]
+        if(any(data_between_epidemic_start$epidemic_tail) & nrow(data_between_epidemic_start)>=tail_period+2){
           outbreak_end = min(as.numeric(data_between_epidemic_start[data_between_epidemic_start$epidemic_tail,]$row_idx))
           end_idx = closing_tail_end_idx(outbreak_end, tail_period, exclude_closing_tail)
-          preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:end_idx,]$outbreak_number =
-            min(outbreak_number_idx,preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:end_idx,]$outbreak_number[preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:end_idx,]$outbreak_number>0])
+          preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:end_idx,]$outbreak_number =
+            min(outbreak_number_idx,preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:end_idx,]$outbreak_number[preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:end_idx,]$outbreak_number>0])
+          outbreak_number_idx = outbreak_number_idx +1
+        } else {
+          preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:epidemic_start_row_idx[idx+1],]$outbreak_number = 
+            min(outbreak_number_idx,preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:epidemic_start_row_idx[idx+1],]$outbreak_number[preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[idx]:epidemic_start_row_idx[idx+1],]$outbreak_number>0])
           outbreak_number_idx = outbreak_number_idx +1
         }
       }
-      
-      # Post-detection size filter: drop outbreaks whose total cases (summed over
-      # the full outbreak window) fall below cumulative_min_cases. Applied before
-      # the Time Period labelling so dropped outbreaks become "non-outbreak period".
-      if (isTRUE(filter_outbreaks_by_size) && !is.null(cumulative_min_cases)) {
-        preoutbreak_by_location_start_end_washout <-
-          filter_small_outbreaks(preoutbreak_by_location_start_end_washout,
-                                 cumulative_min_cases)
-      }
-
-      preoutbreak_by_location_start_end_washout <- preoutbreak_by_location_start_end_washout %>%
-        mutate(`Time Period` = ifelse(
-          outbreak_number>0,
-          "outbreak period",
-          "non-outbreak period"
-        )) %>%
-        mutate(
-          `Time Period` = factor(`Time Period`,levels =c("outbreak period",'non-outbreak period'))
-        )
-    } else if (isTRUE(keep_nonoutbreak_locations) &&
-               nrow(preoutbreak_by_location_start_end_washout) > 0) {
-      # No epidemic start for this location. Rather than dropping it, keep the
-      # full series labelled as a non-outbreak period so downstream consumers
-      # retain every location. Columns match the if-branch above.
-      preoutbreak_by_location_start_end_washout$outbreak_number <- 0
-      preoutbreak_by_location_start_end_washout$`Time Period` <- factor(
-        "non-outbreak period",
-        levels = c("outbreak period", "non-outbreak period")
-      )
-    } else{
-      preoutbreak_by_location_start_end_washout <-data.frame()
     }
     
-    outbreak_list[[list_idx]] <- preoutbreak_by_location_start_end_washout
-    list_idx =list_idx+1
+    #for the last outbreak
+    last_epidemic_start = preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)],]
+    if(last_epidemic_start$outbreak_number>0){
+      final_outbreak_number = last_epidemic_start$outbreak_number
+      after_last_epidemi_start = preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:nrow(preoutbreak_by_location_start_end_washout),]
+      # Guard: if no epidemic_tail exists after the last start (outbreak extends
+      # to the end of the window), fall back to the last row index.
+      if(any(after_last_epidemi_start$epidemic_tail)){
+        last_outbreak_end_idx = min(as.numeric(after_last_epidemi_start[after_last_epidemi_start$epidemic_tail,]$row_idx))
+        end_idx = min(closing_tail_end_idx(last_outbreak_end_idx, tail_period, exclude_closing_tail),
+                      nrow(preoutbreak_by_location_start_end_washout))
+      } else {
+        end_idx = nrow(preoutbreak_by_location_start_end_washout)
+      }
+      preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:end_idx,]$outbreak_number = last_epidemic_start$outbreak_number
+    } else {
+      #there's only one outbreak start (one potential outbreak)
+      data_between_epidemic_start = preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:nrow(preoutbreak_by_location_start_end_washout),]
+      if(any(data_between_epidemic_start$epidemic_tail)){
+        outbreak_end = min(as.numeric(data_between_epidemic_start[data_between_epidemic_start$epidemic_tail,]$row_idx))
+        end_idx = closing_tail_end_idx(outbreak_end, tail_period, exclude_closing_tail)
+        preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:end_idx,]$outbreak_number =
+          min(outbreak_number_idx,preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:end_idx,]$outbreak_number[preoutbreak_by_location_start_end_washout[epidemic_start_row_idx[length(epidemic_start_row_idx)]:end_idx,]$outbreak_number>0])
+        outbreak_number_idx = outbreak_number_idx +1
+      }
+    }
     
+    # Post-detection size filter: drop outbreaks whose total cases (summed over
+    # the full outbreak window) fall below cumulative_min_cases. Applied before
+    # the Time Period labelling so dropped outbreaks become "non-outbreak period".
+    if (isTRUE(filter_outbreaks_by_size) && !is.null(cumulative_min_cases)) {
+      preoutbreak_by_location_start_end_washout <-
+        filter_small_outbreaks(preoutbreak_by_location_start_end_washout,
+                               cumulative_min_cases)
+    }
+
+    preoutbreak_by_location_start_end_washout <- preoutbreak_by_location_start_end_washout %>%
+      dplyr::mutate(`Time Period` = ifelse(
+        outbreak_number>0,
+        "outbreak period",
+        "non-outbreak period"
+      )) %>%
+      dplyr::mutate(
+        `Time Period` = factor(`Time Period`,levels =c("outbreak period",'non-outbreak period'))
+      )
+  } else if (isTRUE(keep_nonoutbreak_locations) &&
+             nrow(preoutbreak_by_location_start_end_washout) > 0) {
+    # No epidemic start for this location. Rather than dropping it, keep the
+    # full series labelled as a non-outbreak period so downstream consumers
+    # retain every location. Columns match the if-branch above.
+    preoutbreak_by_location_start_end_washout$outbreak_number <- 0
+    preoutbreak_by_location_start_end_washout$`Time Period` <- factor(
+      "non-outbreak period",
+      levels = c("outbreak period", "non-outbreak period")
+    )
+  } else{
+    preoutbreak_by_location_start_end_washout <-data.frame()
   }
-  return(outbreak_list)
+  
+  preoutbreak_by_location_start_end_washout
 }

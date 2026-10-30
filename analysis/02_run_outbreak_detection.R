@@ -64,6 +64,17 @@ if (length(stage1_files) == 0) {
        "\nRun Batch 1 (01_pull_data.R) first.")
 }
 
+# Timestamped step markers, so slow steps can be found in the SLURM log
+step_time <- function(label) message(sprintf("[%s] %s", format(Sys.time(), "%H:%M:%S"), label))
+
+# Parallel workers over locations in identify_outbreaks(): config n_workers,
+# else the SLURM CPU allocation, else 1
+n_workers <- if (!is.null(opt$n_workers)) {
+  as.integer(opt$n_workers)
+} else {
+  as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", "1"))
+}
+
 message("Found ", length(stage1_files), " Stage 1 file(s) for ",
         opt$who_region, "::", opt$country_iso3)
 
@@ -211,6 +222,7 @@ normalized <- combined_filtered %>%
   OutbreakExtractR::fill_phantom_zeroes() %>%
   OutbreakExtractR::fill_missing_lps()
 
+step_time("normalization done")
 message("Normalized: ", nrow(normalized), " rows, ",
         length(unique(normalized$location)), " location(s).")
 
@@ -228,6 +240,7 @@ boundary_cache_dir <- here::here(
 )
 
 # Population attachment (WorldPop, keyed by location_period_id + geometry from geo files)
+step_time("add_population() start")
 if (!is.null(raw_sf)) {
   normalized <- OutbreakExtractR::add_population(
     normalized_data    = normalized,
@@ -248,6 +261,7 @@ if (!is.null(raw_sf)) {
 # detection (otherwise NA pop drops them).
 # ---------------------------------------------------------------------------
 
+step_time("build_composite_locations() start")
 composite_geom <- NULL
 if (!is.null(raw_sf)) {
   comp <- tryCatch(
@@ -306,6 +320,7 @@ if (!is.null(pop_qa)) {
 # Threshold = mean weekly incidence over the entire time series, matching reference
 # ---------------------------------------------------------------------------
 
+step_time(sprintf("identify_outbreaks() start (%d worker(s))", n_workers))
 outbreak_list <- tryCatch(
   OutbreakExtractR::identify_outbreaks(
     threshold_type                  = opt$threshold_type,
@@ -324,7 +339,8 @@ outbreak_list <- tryCatch(
     tail_period                     = opt$tail_period,
     filter_outbreaks_by_size        = isTRUE(opt$filter_outbreaks_by_size),
     keep_nonoutbreak_locations      = isTRUE(opt$keep_nonoutbreak_locations),
-    exclude_closing_tail            = isTRUE(opt$exclude_closing_tail)
+    exclude_closing_tail            = isTRUE(opt$exclude_closing_tail),
+    n_workers                       = n_workers
   ),
   error = function(e) {
     warning("identify_outbreaks() failed for ",
@@ -353,7 +369,7 @@ if (nrow(outbreaks_df) == 0) {
 # ---------------------------------------------------------------------------
 
 alerts_df <- tryCatch(
-  OutbreakExtractR::trigger_alert(original_data = normalized),
+  { step_time("trigger_alert() start"); OutbreakExtractR::trigger_alert(original_data = normalized) },
   error = function(e) {
     warning("trigger_alert() failed: ", conditionMessage(e))
     NULL
@@ -386,6 +402,7 @@ outbreaks_df <- dplyr::mutate(
 
 n_outbreak_rows <- sum(outbreaks_df$outbreak_number > 0, na.rm = TRUE)
 
+step_time("writing output")
 write_tabular(outbreaks_df, out_file, opt$use_geoparquet)
 
 # ---------------------------------------------------------------------------
