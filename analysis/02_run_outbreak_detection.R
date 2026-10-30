@@ -136,18 +136,39 @@ if (length(geo_files) == 0) {
   warning("No Stage 1 geo files found for population attachment — pop will be NA.")
   raw_sf <- NULL
 } else {
-  geo_list <- lapply(geo_files, function(f) {
-    tryCatch(
-      if (isTRUE(opt$use_geoparquet)) sfarrow::st_read_parquet(f)
-      else sf::st_read(f, quiet = TRUE),
-      error = function(e) {
-        warning("Failed to read geo file: ", basename(f), " — ", conditionMessage(e))
-        NULL
-      }
-    )
-  })
+  # add_population() and build_composite_locations() use only the first
+  # geometry per location period, so each file is cut to its first row per LP
+  # (id + geometry) as it is read, and again after combining in file order.
+  # The pull windows repeat the same shapes, so this is what keeps large
+  # countries (ETH: 30 files, 2 GB) fast; files are read in parallel when
+  # n_workers > 1.
+  read_geo <- function(f) {
+    tryCatch({
+      g <- if (isTRUE(opt$use_geoparquet)) sfarrow::st_read_parquet(f)
+           else sf::st_read(f, quiet = TRUE)
+      id_col <- intersect(c("location_period_id", "locationPeriod_id", "lctn_pr"), names(g))[1]
+      if (!is.na(id_col)) g <- g[!duplicated(as.character(g[[id_col]])), id_col]
+      g
+    }, error = function(e) {
+      warning("Failed to read geo file: ", basename(f), " — ", conditionMessage(e))
+      NULL
+    })
+  }
+  step_time(sprintf("geometry read start (%d file(s), %d worker(s))", length(geo_files), n_workers))
+  if (n_workers > 1L && length(geo_files) > 1L) {
+    future::plan(future::multisession, workers = min(n_workers, length(geo_files)))
+    geo_list <- furrr::future_map(geo_files, read_geo,
+                                  .options = furrr::furrr_options(packages = "sf", seed = NULL))
+    future::plan(future::sequential)
+  } else {
+    geo_list <- lapply(geo_files, read_geo)
+  }
   raw_sf <- do.call(rbind, Filter(Negate(is.null), geo_list))
-  message("Loaded geometry from ", length(geo_files), " geo file(s).")
+  rm(geo_list)
+  id_col <- intersect(c("location_period_id", "locationPeriod_id", "lctn_pr"), names(raw_sf))[1]
+  if (!is.na(id_col)) raw_sf <- raw_sf[!duplicated(as.character(raw_sf[[id_col]])), ]
+  message("Loaded geometry from ", length(geo_files), " geo file(s): ",
+          nrow(raw_sf), " location period(s).")
 }
 
 # ---------------------------------------------------------------------------
